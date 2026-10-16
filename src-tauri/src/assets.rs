@@ -131,6 +131,9 @@ pub struct PokemonSprite {
     pub height: u32,
     pub page_width: u32,
     pub page_height: u32,
+    // Atlas coordinates for the animation frames; the first frame retains
+    // the legacy x/y/width/height API for React and older clients.
+    pub frames: Vec<[u32; 4]>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -514,6 +517,23 @@ impl GameAssetService {
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or(0) as u32
         };
+        // The source game manifest contains the actual animation atlas
+        // rectangles. Extract them rather than manufacturing frames from a
+        // uniform grid. Cap the number kept in memory per Pokémon.
+        let frames = manifest.get("assets")
+            .and_then(serde_json::Value::as_object)
+            .and_then(|assets| assets.iter().find(|(key, _)| key.ends_with("/1_1_1_3.png")))
+            .and_then(|(_, asset)| asset.get("frames"))
+            .and_then(serde_json::Value::as_array)
+            .map(|frames| frames.iter().take(16).filter_map(|cell| {
+                let read = |key| cell.get(key).and_then(serde_json::Value::as_u64)
+                    .and_then(|value| u32::try_from(value).ok());
+                let (x, y, w, h) = (read("x")?, read("y")?, read("w")?, read("h")?);
+                (w > 0 && h > 0 && x.checked_add(w)? <= page_width
+                    && y.checked_add(h)? <= page_height)
+                    .then_some([x, y, w, h])
+            }).collect::<Vec<_>>())
+            .unwrap_or_default();
         let width = number("w");
         let height = number("h");
         if width == 0 || height == 0 || page_width == 0 || page_height == 0 {
@@ -533,6 +553,7 @@ impl GameAssetService {
             height,
             page_width,
             page_height,
+            frames,
         }))
     }
 
