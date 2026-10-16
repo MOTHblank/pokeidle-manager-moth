@@ -135,7 +135,7 @@ component PageBanner inherits Rectangle {
     in property <string> title;
     height: 141px;
     border-width: 2px;
-    border-bottom-color: #a56540;
+    border-color: #a56540;
     background: #322230;
     Image {
         source: @image-url("../../src/assets/pokeidle-theme/backgrounds/shared-header-scenery.png");
@@ -253,7 +253,7 @@ component DisplayRow inherits Rectangle {
     in property <string> value;
     height: 58px;
     border-width: 1px;
-    border-bottom-color: #81503d;
+    border-color: #81503d;
     background: #35222c;
     HorizontalLayout {
         padding-left: 12px; padding-right: 12px;
@@ -358,7 +358,7 @@ export component ManagerWindow inherits Window {
             width: 232px;
             background: #211821;
             
-            border-right-color: #b67245;
+            border-color: #b67245;
             VerticalLayout {
                 spacing: 0px;
                 Image {
@@ -395,8 +395,8 @@ export component ManagerWindow inherits Window {
                 Rectangle {
                     background: #251921;
                     height: 37px;
-                    border-top-width: 1px;
-                    border-top-color: #ae754b;
+                    border-width: 1px;
+                    border-color: #ae754b;
                     Text { text: "●  Núcleo local"; color: #b7e5aa; font-size: 13px; x: 14px; vertical-alignment: center; }
                 }
             }
@@ -410,7 +410,7 @@ export component ManagerWindow inherits Window {
                     height: 32px;
                     background: #241923;
                     border-width: 1px;
-                    border-bottom-color: #654034;
+                    border-color: #654034;
                     Text { text: "POKEIDLE MANAGER  /  NATIVE DESKTOP"; color: #be9b91; x: 16px; vertical-alignment: center; font-size: 11px; letter-spacing: 1px; }
                 }
                 if root.showing-detail : PageBanner { title: root.current-account; }
@@ -523,7 +523,7 @@ export component ManagerWindow inherits Window {
                             }
                             SectionHeading { label: "Locais disponíveis"; }
                             for hunt in root.hunts : Rectangle {
-                                height: 73px; border-width: 1px; border-bottom-color: #895442; background: #38242f;
+                                height: 73px; border-width: 1px; border-color: #895442; background: #38242f;
                                 HorizontalLayout {
                                     padding: 10px; spacing: 12px;
                                     Rectangle {
@@ -616,7 +616,7 @@ export component ManagerWindow inherits Window {
                                 }
                             }
                             for entry in root.market : Rectangle {
-                                height: 49px; background: #392733; border-width: 1px; border-bottom-color: #6f4c41;
+                                height: 49px; background: #392733; border-width: 1px; border-color: #6f4c41;
                                 HorizontalLayout {
                                     padding: 10px;
                                     Text { text: entry.name; color: #ffebcb; }
@@ -678,8 +678,8 @@ export component ManagerWindow inherits Window {
                 Rectangle {
                     height: 29px;
                     background: #251b25;
-                    border-top-color: #5c3e38;
-                    border-top-width: 1px;
+                    border-color: #5c3e38;
+                    border-width: 1px;
                     Text { text: root.status-line; x: 12px; color: #d3ac8f; font-size: 11px; vertical-alignment: center; overflow: elide; }
                 }
             }

@@ -240,7 +240,7 @@ impl NativeCore {
                         let name = format!("{}  •  Lv. {}", p.name, p.level);
                         if !name.to_lowercase().contains(search.as_str()) { continue; }
                         result.push(InventoryRow {
-                            title: name.into(), quantity: p.id.into(), category: "Pokémon".into()
+                            title: name.into(), quantity: p.id.to_string().into(), category: "Pokémon".into()
                         });
                     }
                 }
