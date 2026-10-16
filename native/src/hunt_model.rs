@@ -5,6 +5,7 @@
 //! never as measured rates. The source model remains an approximation until
 //! calibrated using real combat receipts and repeated HP observations.
 use crate::domain::{AccountSnapshot, Pokemon};
+use crate::hunt_observations::HpSamples;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -80,6 +81,7 @@ struct Attack {
 struct Enemy {
     weight: f64,
     hp: f64,
+    hp_samples: Vec<f64>,
     basic: f64,
     skills: Vec<Attack>,
     loot: f64,
@@ -152,7 +154,8 @@ fn cooldown(base_ms: f64, base_speed: f64, iv: u64) -> f64 {
 }
 fn build_enemy(species: &Species, lead: &Pokemon, lead_species: &Species,
     stats: [f64; 6], target_level: u32, weight: f64,
-    chart: &HashMap<String, HashMap<String, f64>>) -> Option<Enemy> {
+    chart: &HashMap<String, HashMap<String, f64>>,
+    observed_hp: &[f64]) -> Option<Enemy> {
     if species.base.len() < 6 || target_level == 0 || weight <= 0.0 { return None; }
     let enemy_def = ((species.base[2] + 32.0) * target_level as f64 / 100.0).max(1.0);
     let enemy_spdef = ((species.base[4] + 32.0) * target_level as f64 / 100.0).max(1.0);
@@ -179,7 +182,11 @@ fn build_enemy(species: &Species, lead: &Pokemon, lead_species: &Species,
     if basic <= 0.0 && skills.iter().all(|s| s.damage <= 0.0) { return None; }
     let loot = species.loot.iter().map(|(_, chance, lo, hi, gold)|
         (chance / 100.0) * (lo + hi) * 0.5 * gold).sum();
-    Some(Enemy { weight, hp, basic, skills, loot })
+    let hp_samples: Vec<f64> = if observed_hp.len() >= 6 {
+        observed_hp.iter().copied().filter(|hp| hp.is_finite() && *hp > 0.0)
+            .collect()
+    } else { Vec::new() };
+    Some(Enemy { weight, hp, hp_samples, basic, skills, loot })
 }
 fn simulate(enemies: &[Enemy], speed_iv: u64, mobs: usize) -> Option<(f64, f64)> {
     if enemies.is_empty() { return None; }
@@ -196,6 +203,7 @@ fn simulate(enemies: &[Enemy], speed_iv: u64, mobs: usize) -> Option<(f64, f64)>
     let mut elapsed = 0.0_f64;
     let mut measured_start = 0.0_f64;
     let mut total_hits = 0_usize;
+    let mut target_visits = vec![0_usize; enemies.len()];
     // Match Hunt Atlas: discard the startup burst when every move is
     // initially ready at t=0; interleave spawn weights across six waves.
     let stride = count / 2 + if mobs % 2 == 1 {2} else {1};
@@ -209,7 +217,11 @@ fn simulate(enemies: &[Enemy], speed_iv: u64, mobs: usize) -> Option<(f64, f64)>
             threshold += enemies[index].weight;
         }
         let enemy = &enemies[index];
-        let mut hp = enemy.hp;
+        let visits = target_visits[index];
+        target_visits[index] += 1;
+        let mut hp = if enemy.hp_samples.len() >= 6 {
+            enemy.hp_samples[visits % enemy.hp_samples.len()]
+        } else { enemy.hp };
         let mut hits = 0_usize;
         for _ in 0..350 {
             if hp <= 0.0 { break; }
@@ -250,7 +262,8 @@ fn simulate(enemies: &[Enemy], speed_iv: u64, mobs: usize) -> Option<(f64, f64)>
     let paced = raw + (upstream_typical - ideal_one_hit).max(0.0);
     (paced.is_finite() && paced > 0.0).then_some((paced, total_hits as f64 / measured as f64))
 }
-pub fn forecast(snapshot: &AccountSnapshot, reference: &Reference) -> Vec<Forecast> {
+pub fn forecast(snapshot: &AccountSnapshot, reference: &Reference,
+                observed: &HpSamples) -> Vec<Forecast> {
     let Some(lead) = snapshot.state.active_id
         .and_then(|id| snapshot.state.pokemon.iter().find(|p| p.id == id))
     else { return Vec::new(); };
@@ -269,10 +282,14 @@ pub fn forecast(snapshot: &AccountSnapshot, reference: &Reference) -> Vec<Foreca
             hunt.species.iter().filter_map(|s| Some((s.species_id?, s.weight?))).collect()
         } else { ref_hunt.spawns.clone() };
         let enemies: Vec<Enemy> = spawns.iter().filter_map(|(id, weight)| {
+            let hp_sample = observed.get(&(
+                snapshot.account.id.clone(), hunt.slug.clone(), *id, level
+            )).map(Vec::as_slice).unwrap_or(&[]);
             build_enemy(species.get(id)?, lead, lead_species, stats,
-                level, *weight, &reference.types)
+                level, *weight, &reference.types, hp_sample)
         }).collect();
         let coverage = enemies.len() == spawns.len() && !spawns.is_empty();
+        let hp_observed = enemies.iter().filter(|e| e.hp_samples.len() >= 6).count();
         let calculated = if coverage {
             simulate(&enemies, iv, hunt.total_spawns.unwrap_or(6) as usize)
         } else { None };
@@ -293,7 +310,15 @@ pub fn forecast(snapshot: &AccountSnapshot, reference: &Reference) -> Vec<Foreca
         Some(Forecast {
             slug: hunt.slug.clone(),
             trainer_xp_h, pokemon_xp_h, gold_h, kills_h, hits_per_kill,
-            confidence: if coverage && calculated.is_some() { "Modelo" } else { "Sem dados" },
+            confidence: if !coverage || calculated.is_none() {
+                "Sem modelo"
+            } else if hp_observed == enemies.len() {
+                "Modelo · HP observado"
+            } else if hp_observed > 0 {
+                "Modelo · HP parcial"
+            } else {
+                "Modelo · HP estimado"
+            },
         })
     }).collect()
 }
@@ -309,11 +334,23 @@ mod tests {
     }
     #[test]
     fn sustained_rotation_respects_cooldowns() {
-        let s = vec![Enemy { weight: 1.0, hp: 120.0, basic: 20.0,
+        let s = vec![Enemy { weight: 1.0, hp: 120.0, hp_samples: vec![], basic: 20.0,
             skills: vec![Attack {slot: 0, damage: 80.0, cooldown: 10_000.0}], loot: 0.0 }];
         let (ms, hits) = simulate(&s, 16, 1).unwrap();
         assert!(ms > 2000.0);
         assert!(hits > 1.0);
+    }
+    #[test]
+    fn observed_hp_changes_only_that_enemy_sustained_combat() {
+        let plain = Enemy {
+            weight: 1.0, hp: 100.0, hp_samples: vec![], basic: 50.0,
+            skills: vec![], loot: 0.0
+        };
+        let mut observed = plain.clone();
+        observed.hp_samples = vec![1_000.0; 6];
+        let (base, _) = simulate(&[plain], 16, 1).unwrap();
+        let (measured_hp, _) = simulate(&[observed], 16, 1).unwrap();
+        assert!(measured_hp > base);
     }
     #[test]
     fn trainer_and_pokemon_modifiers_are_separate() {

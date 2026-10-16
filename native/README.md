@@ -152,6 +152,14 @@ between encounters, includes basic attacks, the game's attack global lock
 and conservative wave/action pacing from Hunt Atlas. Trainer and Pokémon
 XP multipliers are always applied separately. Where data are incomplete, the
 UI shows a dash rather than fabricating a rate. Forecast rates are **not**
-server-measured observations. Future validation against live battle traces
+server-measured observations. The native background connection records wild maximum HP for a single
+account, hunt, species and level, one reading per observed encounter.
+After six observations of that exact spawn combination, the simulator cycles
+actual sampled HP instead of relying on inferred wild HP. Predictions show
+whether the HP source is inferred, partially observed or observed across the
+full spawn composition. Those observations are process-local and never
+become XP/h measurements or global rate multipliers.
+
+Future validation against live battle traces
 must precede declaring the model accurate; moving hunts does not depend
 on prediction completeness.
