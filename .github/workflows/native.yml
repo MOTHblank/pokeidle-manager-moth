@@ -19,3 +19,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check native desktop and Slint markup
         run: cargo check --manifest-path native/Cargo.toml
+      - name: Execute native Rust regression tests
+        run: cargo test --manifest-path native/Cargo.toml -- --test-threads=2
