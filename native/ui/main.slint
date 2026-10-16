@@ -3,6 +3,7 @@ import { WoodButton } from "widgets.slint";
 import { AccountRow, AccountCard } from "dashboard.slint";
 import { LiveRow, LiveStreamCard } from "lives.slint";
 import { HuntIvTile } from "hunt-tiles.slint";
+import { MarketPulseTopRow, MarketPulseRecentRow, MarketTopPulse, MarketRecentPulse } from "market-pulse.slint";
 
 export struct ProtocolFrameRow {
     stamp: string,
@@ -292,6 +293,13 @@ export component ManagerWindow inherits Window {
     in-out property <[InventoryRow]> inventory: [];
     in-out property <[InventoryGridRow]> inventory-grid: [];
     in-out property <[MarketRow]> market: [];
+    in-out property <string> market-search: "";
+    in-out property <int> market-currency-filter: 0;
+    in-out property <string> market-offer-count: "0";
+    in-out property <[MarketPulseTopRow]> market-pulse-top: [];
+    in-out property <[MarketPulseRecentRow]> market-pulse-recent: [];
+    in-out property <bool> market-pulse-top-available: false;
+    in-out property <bool> market-pulse-recent-available: false;
     in-out property <[MarketHistoryRow]> market-history: [];
     in-out property <[MarketTopRow]> market-top-sales: [];
     in-out property <[MarketPurchaseRow]> market-purchases: [];
@@ -1494,18 +1502,120 @@ export component ManagerWindow inherits Window {
                         }
 
                         if !root.showing-detail && root.page == 4 : VerticalLayout {
-                            spacing: 14px;
+                            spacing: 13px;
                             HorizontalLayout {
+                                spacing: 10px;
                                 SectionHeading { label: "Análise do Mercado"; }
+                                Text {
+                                    text: "ÚLTIMAS 24H";
+                                    color: #dab38e;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                }
                                 WoodButton { label: "Atualizar leitura"; clicked => { root.refresh-market(); } }
                             }
-                            Text { text: root.market-status; color: #c9b4a3; }
+                            Text { text: root.market-status; color: #c9b4a3; font-size: 12px; }
                             HorizontalLayout {
                                 spacing: 7px;
-                                WoodButton { label: "Ofertas"; selected: root.market-view == 0; clicked => { root.market-view = 0; } }
-                                WoodButton { label: "Histórico"; selected: root.market-view == 1; clicked => { root.market-view = 1; } }
-                                WoodButton { label: "Mais vendidos"; selected: root.market-view == 2; clicked => { root.market-view = 2; } }
-                                WoodButton { label: "Minhas compras"; selected: root.market-view == 3; clicked => { root.market-view = 3; } }
+                                Text { text: "Moeda"; color: #dfbead; vertical-alignment: center; }
+                                WoodButton {
+                                    label: "Todas";
+                                    selected: root.market-currency-filter == 0;
+                                    clicked => { root.market-currency-filter = 0; }
+                                }
+                                WoodButton {
+                                    label: "Gold";
+                                    selected: root.market-currency-filter == 1;
+                                    clicked => { root.market-currency-filter = 1; }
+                                }
+                                WoodButton {
+                                    label: "Gemas";
+                                    selected: root.market-currency-filter == 2;
+                                    clicked => { root.market-currency-filter = 2; }
+                                }
+                            }
+                            FlexboxLayout {
+                                spacing: 12px;
+                                flex-wrap: wrap;
+                                MarketTopPulse {
+                                    entries: root.market-pulse-top;
+                                    has-results: root.market-pulse-top-available;
+                                    status: root.market-history-status;
+                                }
+                                MarketRecentPulse {
+                                    entries: root.market-pulse-recent;
+                                    has-results: root.market-pulse-recent-available;
+                                    status: root.market-history-status;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                SectionHeading { label: "Ofertas ativas"; }
+                                Text {
+                                    text: root.market-offer-count + " itens";
+                                    color: #c6ab9d;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 9px;
+                                Text { text: "Buscar item"; color: #dfbead; vertical-alignment: center; }
+                                LineEdit {
+                                    text <=> root.market-search;
+                                    placeholder-text: "Nome ou ID";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                            Rectangle {
+                                height: 36px;
+                                background: #593441;
+                                border-color: #ac6847;
+                                border-width: 2px;
+                                HorizontalLayout {
+                                    padding-left: 10px; padding-right: 10px; spacing: 8px;
+                                    Text { text: "ITEM"; color: #ffe8cc; font-weight: 700; horizontal-stretch: 1; }
+                                    Text { text: "OFERTAS"; width: 92px; color: #ffe8cc; font-weight: 700; }
+                                    Text { text: "UNIDADES"; width: 92px; color: #ffe8cc; font-weight: 700; }
+                                    Text { text: "MENOR GOLD"; width: 102px; color: #ffe8cc; font-weight: 700; }
+                                    Text { text: "MENOR GEMA"; width: 102px; color: #ffe8cc; font-weight: 700; }
+                                }
+                            }
+                            ListView {
+                                height: 318px;
+                                for entry in root.market : Rectangle {
+                                    height: 47px;
+                                    background: #392733;
+                                    border-width: 1px;
+                                    border-color: #6f4c41;
+                                    HorizontalLayout {
+                                        padding-left: 10px; padding-right: 10px; spacing: 8px;
+                                        Text { text: entry.name; color: #ffebcb; horizontal-stretch: 1; overflow: elide; }
+                                        Text { text: entry.listings; width: 92px; color: #d0b0a3; }
+                                        Text { text: entry.quantity; width: 92px; color: #d0b0a3; }
+                                        Text { text: entry.gold; width: 102px; color: #ffcd77; }
+                                        Text { text: entry.orbs; width: 102px; color: #d7b8ea; }
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 7px;
+                                SectionHeading { label: "Históricos"; }
+                                WoodButton {
+                                    label: "Vendas globais";
+                                    selected: root.market-view == 1;
+                                    clicked => { root.market-view = root.market-view == 1 ? 0 : 1; }
+                                }
+                                WoodButton {
+                                    label: "Mais vendidos";
+                                    selected: root.market-view == 2;
+                                    clicked => { root.market-view = root.market-view == 2 ? 0 : 2; }
+                                }
+                                WoodButton {
+                                    label: "Minhas compras";
+                                    selected: root.market-view == 3;
+                                    clicked => { root.market-view = root.market-view == 3 ? 0 : 3; }
+                                }
                             }
                             if root.market-view != 0 : Text {
                                 text: root.market-history-status;
@@ -1513,35 +1623,10 @@ export component ManagerWindow inherits Window {
                                 font-size: 12px;
                                 wrap: word-wrap;
                             }
-                            if root.market-view == 0 : Rectangle {
-                                height: 39px; background: #593441; border-color: #ac6847; border-width: 2px;
-                                HorizontalLayout {
-                                    padding: 10px;
-                                    Text { text: "Item"; color: #ffe8cc; font-weight: 700; }
-                                    Text { text: "Ofertas"; color: #ffe8cc; font-weight: 700; }
-                                    Text { text: "Unidades"; color: #ffe8cc; font-weight: 700; }
-                                    Text { text: "Gold mínimo"; color: #ffe8cc; font-weight: 700; }
-                                    Text { text: "Orbs"; color: #ffe8cc; font-weight: 700; }
-                                }
-                            }
-                            if root.market-view == 0 : ListView {
-                                height: 490px;
-                                for entry in root.market : Rectangle {
-                                    height: 49px; background: #392733; border-width: 1px; border-color: #6f4c41;
-                                    HorizontalLayout {
-                                        padding: 10px;
-                                        Text { text: entry.name; color: #ffebcb; }
-                                        Text { text: entry.listings; color: #d0b0a3; }
-                                        Text { text: entry.quantity; color: #d0b0a3; }
-                                        Text { text: entry.gold; color: #ffcd77; }
-                                        Text { text: entry.orbs; color: #d7b8ea; }
-                                    }
-                                }
-                            }
                             if root.market-view == 1 : ListView {
-                                height: 490px;
+                                height: 260px;
                                 for entry in root.market-history : Rectangle {
-                                    height: 70px; background: #3b2734; border-width: 1px; border-color: #885743;
+                                    height: 66px; background: #3b2734; border-width: 1px; border-color: #885743;
                                     HorizontalLayout {
                                         padding: 9px; spacing: 10px;
                                         VerticalLayout {
@@ -1558,9 +1643,9 @@ export component ManagerWindow inherits Window {
                                 }
                             }
                             if root.market-view == 2 : ListView {
-                                height: 490px;
+                                height: 260px;
                                 for entry in root.market-top-sales : Rectangle {
-                                    height: 65px; background: #3b2734; border-width: 1px; border-color: #885743;
+                                    height: 62px; background: #3b2734; border-width: 1px; border-color: #885743;
                                     HorizontalLayout {
                                         padding: 9px; spacing: 12px;
                                         Text { text: entry.item; color: #ffeac7; font-weight: 730; horizontal-stretch: 1; }
@@ -1571,9 +1656,9 @@ export component ManagerWindow inherits Window {
                                 }
                             }
                             if root.market-view == 3 : ListView {
-                                height: 490px;
+                                height: 260px;
                                 for entry in root.market-purchases : Rectangle {
-                                    height: 71px; background: #3b2734; border-width: 1px; border-color: #885743;
+                                    height: 67px; background: #3b2734; border-width: 1px; border-color: #885743;
                                     HorizontalLayout {
                                         padding: 9px; spacing: 12px;
                                         VerticalLayout {
@@ -1586,7 +1671,7 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                             }
-                                                        SectionHeading { label: "Compra automática — Sniper"; }
+                            SectionHeading { label: "Compra automática — Sniper"; }
                             HorizontalLayout {
                                 Text { text: "Conta"; color: #ebc9b5; vertical-alignment: center; }
                                 for account[i] in root.accounts : WoodButton {
