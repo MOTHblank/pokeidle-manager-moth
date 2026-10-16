@@ -171,3 +171,13 @@ become XP/h measurements or global rate multipliers.
 Future validation against live battle traces
 must precede declaring the model accurate; moving hunts does not depend
 on prediction completeness.
+
+## Windows native release channel
+
+A **separate** GitHub workflow at `.github/workflows/native-release.yml`
+builds and tests the standalone Windows executable, wraps the EXE with this
+README and GPL license in a portable ZIP, then publishes a SHA-256 file. It
+is triggered only for an explicit `native-v*` tag and never runs for the
+original Tauri application's `v*` releases. Until the remaining parity and
+validation issues are resolved, this development branch does not create
+those native release tags.

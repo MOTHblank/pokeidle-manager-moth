@@ -1,0 +1,48 @@
+name: Native Windows release
+
+on:
+  push:
+    tags:
+      - 'native-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Windows portable Slint executable
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native -> target
+      - name: Check and test native Rust application
+        run: cargo test --manifest-path native/Cargo.toml
+      - name: Compile Windows native release
+        run: cargo build --manifest-path native/Cargo.toml --release
+      - name: Package portable build and checksums
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ github.ref_name }}'
+          $staging = 'native-portable'
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          Copy-Item -LiteralPath 'native/target/release/pokeidle-manager-native.exe' -Destination "$staging/pokeidle-manager-native.exe"
+          Copy-Item -LiteralPath 'native/README.md' -Destination "$staging/README.md"
+          Copy-Item -LiteralPath 'LICENSE' -Destination "$staging/LICENSE"
+          Compress-Archive -Path "$staging/*" -DestinationPath "Pokeidle-Manager-Native-$version-win64.zip" -Force
+          $archive = "Pokeidle-Manager-Native-$version-win64.zip"
+          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $archive" | Set-Content -LiteralPath 'SHA256SUMS-native.txt' -Encoding ascii
+      - name: Publish separate native release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = "Pokeidle-Manager-Native-$env:GITHUB_REF_NAME-win64.zip"
+          gh release create $env:GITHUB_REF_NAME $archive SHA256SUMS-native.txt --title "Pokeidle Manager Native $env:GITHUB_REF_NAME" --generate-notes --notes "Standalone Windows Slint/Rust executable. No Tauri, WebView2, or userscripts. Firefox is used only for authenticated game bootstrap; native Twitch IRC requires separate authorization. Consult README for requirements and limitations."
