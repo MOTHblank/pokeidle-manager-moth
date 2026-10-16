@@ -14,6 +14,14 @@ export struct AccountRow {
     online: bool,
     level: string,
     pokemon: string,
+    pokemon-level: string,
+    hp-percent: int,
+    bonus-label: string,
+    bonus-vip: bool,
+    bonus-guild: bool,
+    bonus-guild-boost: bool,
+    bonus-twitch: bool,
+    bonus-event: bool,
     pokemon-art: image,
     has-pokemon-art: bool,
     hp: string,
@@ -242,66 +250,133 @@ component SectionHeading inherits Text {
     height: 34px;
     vertical-alignment: center;
 }
+component AccountMiniStat inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <image> artwork;
+    height: 50px;
+    border-color: #a46c4655;
+    border-width: 1px;
+    background: #3a2833;
+    HorizontalLayout {
+        padding: 6px;
+        spacing: 7px;
+        Image { source: root.artwork; width: 28px; height: 28px; image-fit: contain; }
+        VerticalLayout {
+            spacing: 3px;
+            Text { text: root.label; color: #e8c199; font-size: 11px; }
+            Text { text: root.value; color: #fff0d3; font-size: 14px; font-weight: 760; }
+        }
+    }
+}
+
 component AccountCard inherits Rectangle {
     in property <AccountRow> item;
     in property <bool> session-mode: false;
     callback details;
     callback connect;
-    height: 254px;
-    min-width: 320px;
-    border-width: 2px;
-    border-color: root.item.online ? #986840 : #65414c;
-    border-radius: 10px;
-    background: #452832;
+    width: 49%;
+    min-width: 348px;
+    height: 366px;
+    border-width: 3px;
+    border-color: root.item.online ? #c87543 : #78534d;
+    border-radius: 9px;
+    background: #432637;
     VerticalLayout {
-        padding: 14px;
+        padding: 13px;
         spacing: 8px;
-        HorizontalLayout {
-            spacing: 8px;
-            Rectangle {
-                width: 39px;
-                height: 39px;
-                border-radius: 6px;
-                background: #8f4766;
+        Rectangle {
+            height: 65px;
+            background: #703b43;
+            border-width: 1px;
+            border-color: #d4864c;
+            border-radius: 6px;
+            HorizontalLayout {
+                padding: 7px;
+                spacing: 9px;
+                Rectangle {
+                    width: 42px;
+                    height: 42px;
+                    background: #98475e;
+                    border-width: 2px;
+                    border-color: #f6c25d;
+                    border-radius: 7px;
+                    Text {
+                        text: root.item.initial;
+                        font-size: 23px;
+                        font-weight: 800;
+                        color: #fff5dd;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    spacing: 5px;
+                    HorizontalLayout {
+                        spacing: 7px;
+                        Text { text: root.item.name; color: #fff2d6; font-size: 17px; font-weight: 750; }
+                        Text { text: root.item.bonus-label; color: #a6ead3; font-size: 11px; font-weight: 770; }
+                    }
+                    HorizontalLayout {
+                        spacing: 5px;
+                        Text {
+                            text: root.item.status;
+                            color: root.item.online ? #a4edbb : #f1ad91;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+                        if root.item.bonus-vip : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-vip.png"); width: 18px; height: 18px; image-fit: contain; }
+                        if root.item.bonus-guild : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-guild.png"); width: 18px; height: 18px; image-fit: contain; }
+                        if root.item.bonus-guild-boost : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-guild-boost.png"); width: 18px; height: 18px; image-fit: contain; }
+                        if root.item.bonus-twitch : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-twitch.png"); width: 18px; height: 18px; image-fit: contain; }
+                        if root.item.bonus-event : Text { text: "★"; color: #f5cb80; font-size: 14px; }
+                    }
+                }
                 Text {
-                    text: root.item.initial;
-                    color: white; font-size: 24px; font-weight: 700;
-                    horizontal-alignment: center; vertical-alignment: center;
+                    text: root.item.mode;
+                    color: #ffe3b2;
+                    font-size: 12px;
+                    font-weight: 750;
+                    horizontal-alignment: right;
                 }
             }
-            VerticalLayout {
-                spacing: 1px;
-                Text { text: root.item.name; font-weight: 760; color: #fff0df; font-size: 18px; }
-                Text { text: root.item.status + "  •  " + root.item.mode; color: root.item.online ? #8de1b3 : #eab085; font-size: 12px; }
-            }
-            Text { text: root.item.vip; color: #ffce76; font-weight: 700; horizontal-alignment: right; }
         }
-        Rectangle { height: 2px; background: #9d6750; }
         if root.session-mode : VerticalLayout {
-            spacing: 7px;
-            Text { text: "Sessão de caça  •  " + root.item.session-elapsed; color: #ffe5bb; font-weight: 700; font-size: 14px; }
-            HorizontalLayout {
-                spacing: 12px;
-                Text { text: "Kills  " + root.item.session-kills; color: #f0d9b6; }
-                Text { text: "Capturas  " + root.item.session-captures; color: #f0d9b6; }
-                Text { text: "Shinies  " + root.item.session-shinies; color: #f0d9b6; }
+            spacing: 10px;
+            Rectangle {
+                height: 53px;
+                background: #30202e;
+                border-color: #976041;
+                border-width: 1px;
+                HorizontalLayout {
+                    padding: 9px;
+                    Text { text: "Tempo da sessão"; color: #ead3bb; vertical-alignment: center; }
+                    Text { text: root.item.session-elapsed; color: #ffdc8c; font-size: 18px; font-weight: 750; horizontal-alignment: right; vertical-alignment: center; }
+                }
             }
-            Text { text: "XP Treinador  " + root.item.session-xp + "     XP Pokémon  " + root.item.session-pokemon-xp; color: #beeac0; font-weight: 650; }
-            Text { text: "Gold da sessão  " + root.item.session-gold; color: #ffca75; font-weight: 650; }
+            HorizontalLayout {
+                spacing: 8px;
+                AccountMiniStat { label: "Kills"; value: root.item.session-kills; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-hunt.png"); }
+                AccountMiniStat { label: "Capturas"; value: root.item.session-captures; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-background.png"); }
+                AccountMiniStat { label: "Shinies"; value: root.item.session-shinies; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-diamond.png"); }
+            }
+            AccountMiniStat { label: "XP Treinador / Pokémon"; value: root.item.session-xp + " / " + root.item.session-pokemon-xp; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-level.png"); }
+            AccountMiniStat { label: "Gold da sessão"; value: root.item.session-gold; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-gold.png"); }
         }
         if !root.session-mode : HorizontalLayout {
             spacing: 12px;
             Rectangle {
-                width: 115px;
-                height: 113px;
-                border-radius: 8px;
+                width: 41%;
+                height: 205px;
                 background: #2b2233;
+                border-color: #a46f4b;
+                border-width: 1px;
+                border-radius: 6px;
                 Image {
                     source: @image-url("../../src/assets/pokeidle-theme/backgrounds/pokemon-battle-backdrop.png");
                     width: parent.width;
                     height: parent.height;
                     image-fit: cover;
-                    opacity: 0.75;
                 }
                 if root.item.has-pokemon-art : Image {
                     source: root.item.pokemon-art;
@@ -310,28 +385,63 @@ component AccountCard inherits Rectangle {
                     image-fit: contain;
                 }
                 if !root.item.has-pokemon-art : Text {
-                    text: root.item.pokemon;
-                    color: #fff1dc;
-                    wrap: word-wrap;
-                    font-weight: 750;
-                    font-size: 14px;
+                    text: "?";
+                    color: #f5deb5;
+                    font-size: 50px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
             }
             VerticalLayout {
-                spacing: 6px;
-                Text { text: root.item.level + "  •  " + root.item.hunt; color: #ffe0a7; wrap: word-wrap; font-size: 13px; }
-                Text { text: "HP  " + root.item.hp; color: #f5b6ae; }
-                Text { text: "XP/h    " + root.item.xp-rate; color: #f1e3bf; font-weight: 700; }
-                Text { text: "Gold/h " + root.item.gold-rate; color: #f1e3bf; font-weight: 700; }
-                Text { text: "Potions " + root.item.potion + "     Balls " + root.item.ball; color: #cdaaa7; font-size: 12px; }
+                spacing: 7px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: root.item.pokemon; color: #fff0d9; font-size: 15px; font-weight: 750; }
+                    Text { text: root.item.pokemon-level; color: #e7cbb0; font-size: 12px; }
+                }
+                HorizontalLayout {
+                    spacing: 7px;
+                    Text { text: "HP"; color: #eac3b6; font-size: 12px; }
+                    Rectangle {
+                        height: 8px;
+                        horizontal-stretch: 1;
+                        background: #2a1721;
+                        border-color: #a76b3d;
+                        border-width: 1px;
+                        Rectangle {
+                            height: parent.height - 2px;
+                            width: (parent.width - 2px) * root.item.hp-percent / 100;
+                            x: 1px;
+                            y: 1px;
+                            background: #50bf74;
+                        }
+                    }
+                    Text { text: root.item.hp; color: #f3d3b6; font-size: 12px; font-weight: 750; }
+                }
+                HorizontalLayout {
+                    spacing: 3px;
+                    AccountMiniStat { label: "XP/h"; value: root.item.xp-rate; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-level.png"); }
+                    AccountMiniStat { label: "Gold/h"; value: root.item.gold-rate; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-gold.png"); }
+                }
+                HorizontalLayout {
+                    spacing: 3px;
+                    AccountMiniStat { label: "Potions"; value: root.item.potion; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-background.png"); }
+                    AccountMiniStat { label: "Balls"; value: root.item.ball; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-hunt.png"); }
+                }
             }
         }
         HorizontalLayout {
-            spacing: 9px;
-            WoodButton { label: "Detalhes"; clicked => { root.details(); } }
-            WoodButton { label: "Conectar"; enabled: !root.item.online; clicked => { root.connect(); } }
+            spacing: 8px;
+            Text {
+                text: root.item.hunt;
+                color: #f4d499;
+                font-size: 12px;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            WoodButton { label: "Detalhes"; height: 31px; clicked => { root.details(); } }
+            WoodButton { label: "Conectar"; height: 31px; enabled: !root.item.online; clicked => { root.connect(); } }
         }
     }
 }
@@ -412,6 +522,7 @@ export component ManagerWindow inherits Window {
     in-out property <string> sale-name: "";
     in-out property <bool> confirm-sell-all: false;
     in-out property <bool> session-mode: false;
+    in-out property <bool> connect-next-available: true;
     in-out property <[AccountRow]> accounts: [];
     in-out property <[HuntRow]> hunts: [];
     in-out property <[InventoryRow]> inventory: [];
@@ -497,6 +608,7 @@ export component ManagerWindow inherits Window {
     in-out property <bool> auto-sell: false;
 
     callback connect-account(int);
+    callback connect-next-account;
     callback save-native-settings(int, bool);
     callback toggle-developer-mode(bool);
     callback clear-protocol-frames;
@@ -540,11 +652,11 @@ export component ManagerWindow inherits Window {
                         padding: 8px;
                         spacing: 8px;
                         NavigationButton { name: "Dashboard"; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/menu-dashboard.png"); active: root.page == 0 && !root.showing-detail; clicked => { root.page = 0; root.showing-detail = false; root.route-changed(0); } }
-                        NavigationButton { name: "Onde Caçar"; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/menu-hunt.png"); active: root.page == 1 && !root.showing-detail; clicked => { root.page = 1; root.showing-detail = false; root.route-changed(1); } }
                         NavigationButton { name: "Automações"; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/menu-automation.png"); active: root.page == 2 && !root.showing-detail; clicked => { root.page = 2; root.showing-detail = false; root.route-changed(2); } }
                         NavigationButton { name: "Inventários"; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/menu-inventory.png"); active: root.page == 3 && !root.showing-detail; clicked => { root.page = 3; root.showing-detail = false; root.route-changed(3); } }
                         NavigationButton { name: "Mercado"; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/menu-market.png"); active: root.page == 4 && !root.showing-detail; clicked => { root.page = 4; root.showing-detail = false; root.route-changed(4); } }
                         NavigationButton { name: "Lives"; artwork: @image-url("../../src/assets/ui-icons/live-icon.png"); active: root.page == 5 && !root.showing-detail; clicked => { root.page = 5; root.showing-detail = false; root.route-changed(5); } }
+                        NavigationButton { name: "Onde Caçar"; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/menu-hunt.png"); active: root.page == 1 && !root.showing-detail; clicked => { root.page = 1; root.showing-detail = false; root.route-changed(1); } }
                         NavigationButton { name: "Configurações"; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/menu-settings.png"); active: root.page == 6 && !root.showing-detail; clicked => { root.page = 6; root.showing-detail = false; root.route-changed(6); } }
                         NavigationButton { name: "Comunidade"; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/menu-community.png"); active: root.page == 7 && !root.showing-detail; clicked => { root.page = 7; root.showing-detail = false; root.route-changed(7); } }
                     }
@@ -585,6 +697,23 @@ export component ManagerWindow inherits Window {
                     height: 141px;
                     Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/dashboard-scenery.png"); width: parent.width; height: parent.height; image-fit: cover; }
                     Image { x: 18px; y: 20px; source: @image-url("../../src/assets/pokeidle-theme/backgrounds/dashboard-titleboard.png"); width: 400px; height: 91px; image-fit: fill; }
+                    HorizontalLayout {
+                        x: parent.width - 365px;
+                        y: 45px;
+                        width: 352px;
+                        height: 43px;
+                        spacing: 8px;
+                        WoodButton {
+                            label: root.session-mode ? "Sessão" : "Resumo";
+                            selected: root.session-mode;
+                            clicked => { root.session-mode = !root.session-mode; }
+                        }
+                        WoodButton {
+                            label: "+ Adicionar conta";
+                            enabled: root.connect-next-available;
+                            clicked => { root.connect-next-account(); }
+                        }
+                    }
                 }
                 if !root.showing-detail && root.page == 1 : PageBanner { title: "Onde Caçar"; }
                 if !root.showing-detail && root.page == 2 : PageBanner { title: "Automações"; }
@@ -885,10 +1014,7 @@ export component ManagerWindow inherits Window {
 
                         if !root.showing-detail && root.page == 0 : VerticalLayout {
                             spacing: 14px;
-                            HorizontalLayout {
-                                SectionHeading { label: "Visão geral das contas"; }
-                                WoodButton { label: root.session-mode ? "Resumo" : "Sessão"; clicked => { root.session-mode = !root.session-mode; } }
-                            }
+                            SectionHeading { label: "Visão geral das contas"; }
                             FlexboxLayout {
                                 spacing: 10px;
                                 flex-wrap: wrap;
