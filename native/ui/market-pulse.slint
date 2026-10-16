@@ -24,7 +24,7 @@ export component MarketTopPulse inherits Rectangle {
     in property <bool> has-results: false;
     in property <string> status: "Aguardando histórico";
 
-    width: 433px;
+    width: 526px;
     height: 328px;
     border-radius: 9px;
     border-width: 2px;
@@ -54,7 +54,7 @@ export component MarketTopPulse inherits Rectangle {
             vertical-alignment: center;
             horizontal-alignment: center;
         }
-        ListView {
+        if root.has-results : ListView {
             height: 218px;
             for sale in root.entries : Rectangle {
                 height: 63px;
@@ -85,7 +85,7 @@ export component MarketRecentPulse inherits Rectangle {
     in property <bool> has-results: false;
     in property <string> status: "Aguardando histórico";
 
-    width: 433px;
+    width: 526px;
     height: 328px;
     border-radius: 9px;
     border-width: 2px;
@@ -115,7 +115,7 @@ export component MarketRecentPulse inherits Rectangle {
             vertical-alignment: center;
             horizontal-alignment: center;
         }
-        ListView {
+        if root.has-results : ListView {
             height: 218px;
             for sale in root.entries : Rectangle {
                 height: 63px;
