@@ -28,8 +28,10 @@ comparison throughout the work.
   by account_inventory/account_depot.
 - **Mercado** route using the original market summary reader and original
   SQLite migrations in an isolated native data directory.
-- **Lives** reading the game's live Twitch/Kick directory, with a
-  deliberate OS-level open-channel action (does not embed a browser).
+- **Lives** reading the game's Twitch/Kick directory and a lightweight
+  native Twitch IRC client capable of reconciling JOIN/PART membership
+  without opening Twitch video tabs. A real Twitch user OAuth token is needed.
+  This connection is *not* proof of receiving PokeIdle's viewing bonus.
 - **Configurações**, **Comunidade**, and per-account details navigation.
 - Existing Firefox Game1–Game4 login via ephemeral BiDi observer,
   followed by native websocket handshake and server-confirmed handoff.
@@ -40,8 +42,7 @@ comparison throughout the work.
 This is **not a complete pixel-perfect or feature-complete React port**.
 The original advanced Market and Inventory workflows, animated Pokémon
 sprites, real Dashboard hunt-session statistics, all automation settings,
-fine-grained original layouts/typography, Hunt Atlas forecasts, native
-Twitch IRC and installation/update flow still need implementation.
+fine-grained original layouts/typography, Hunt Atlas forecasts, Twitch OAuth onboarding/bonus verification and installation/update flow still need implementation.
 This milestone brings back the original page structure and navigation
 rather than asserting visual or behavioral parity that hasn't been tested.
 
@@ -69,3 +70,22 @@ so successful Slint compilation, pixel comparison and BiDi authentication
 have not been independently verified. The source is being committed as
 an incremental, reviewable port, not represented as a tested production
 replacement.
+
+## Native Twitch IRC (experimental)
+
+Each account can create its own lightweight IRC connection from environment
+variables MOTH_TWITCH_NICK_GAME1 through GAME4 and
+MOTH_TWITCH_OAUTH_GAME1 through GAME4. Supply a valid Twitch user login and
+user access token with the appropriate IRC read permissions. The app does not
+save or log these credentials. Without them the IRC client does not connect.
+
+The game-provided live channel directory is reconciled in place with JOIN and
+PART, respecting a 600ms pause between channel mutations. Twitch caps normal
+accounts at 20 join attempts per 10 seconds and 100 concurrent channels; the
+native client enforces those limits. Server PING messages are acknowledged
+with PONG, stale connections are re-established, and no video is loaded.
+
+**Important:** Twitch IRC channel membership by itself does not certify that
+the game awards any Twitch bonus. Displayed bonus values must originate from
+the game's authoritative state. A proper native Twitch authorization and
+verified game-bonus end-to-end path remain necessary for final parity.

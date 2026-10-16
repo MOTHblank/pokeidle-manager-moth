@@ -329,6 +329,7 @@ export component ManagerWindow inherits Window {
     in-out property <string> connected-accounts: "0/4";
     in-out property <string> status-line: "Pronto";
     in-out property <string> market-status: "Aguardando conexão";
+    in-out property <string> twitch-irc-status: "Twitch IRC desativado";
     in-out property <string> current-account: "Game 1";
     in-out property <string> current-level: "—";
     in-out property <string> current-hunt: "—";
@@ -632,6 +633,7 @@ export component ManagerWindow inherits Window {
                             spacing: 13px;
                             SectionHeading { label: "Lives do Pokeidle"; }
                             Text { text: "Canais reportados pela conexão nativa do jogo"; color: #c6a99c; }
+                            Text { text: root.twitch-irc-status; color: #9bdfc9; font-size: 12px; }
                             for channel in root.lives : Rectangle {
                                 height: 73px; border-width: 2px; border-color: #8f5341; border-radius: 7px; background: #3e2937;
                                 HorizontalLayout {
