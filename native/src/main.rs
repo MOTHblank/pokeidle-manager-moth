@@ -573,7 +573,15 @@ impl NativeCore {
             self.twitch.set_channels(&profile.id(), channels.iter().map(String::as_str));
         }
 
-        if let Some(s) = snapshot {
+        let selected_targets = automation_target_ids(ui);
+        let selected_states: Vec<_> = lives.iter().filter(|live|
+            selected_targets.contains(&live.account.id)).collect();
+        let representative = if ui.get_page() == 2 {
+            selected_states.first().copied()
+        } else {
+            snapshot
+        };
+        if let Some(s) = representative {
             let automation = &s.state.automation;
             ui.set_auto_potion(automation.auto_potion.unwrap_or(false));
             ui.set_auto_revive(automation.auto_revive.unwrap_or(false));
@@ -583,12 +591,12 @@ impl NativeCore {
                 .round().clamp(10.0, 100.0) as i32;
             ui.set_potion_threshold_percent(potion_threshold);
             let mut last = self.last_editor_account.lock();
-            if last.as_deref() != Some(&id) {
+            if last.as_deref() != Some(&s.account.id) {
                 ui.set_potion_selection(automation.potion_ids.iter()
                     .map(u64::to_string).collect::<Vec<_>>().join(",").into());
                 ui.set_ball_selection(automation.ball_ids.iter()
                     .map(u64::to_string).collect::<Vec<_>>().join(",").into());
-                *last = Some(id.clone());
+                *last = Some(s.account.id.clone());
             }
             let capture = &s.state.capture_mode;
             let auto_buy = &s.state.auto_buy_rules;
@@ -607,25 +615,45 @@ impl NativeCore {
                 .any(|r| r.enabled && matches!(&r.kind, domain::AutoBuyKind::Item));
             let ball_buy = auto_buy.iter()
                 .any(|r| r.enabled && matches!(&r.kind, domain::AutoBuyKind::Ball));
+            // React's checkbox represents ALL selected accounts. A mixed
+            // selection is shown as disabled/unchecked until it is applied
+            // to every target profile.
+            let all = |test: &dyn Fn(&domain::AccountLiveSnapshot) -> bool| -> Option<bool> {
+                if ui.get_page() == 2 {
+                    Some(!selected_states.is_empty()
+                        && selected_states.len() == selected_targets.len()
+                        && selected_states.iter().all(|state| test(state)))
+                } else {
+                    Some(test(s))
+                }
+            };
             ui.set_automations(model(vec![
                 automation_row("autoPotion", "Usar Poções",
-                    "Usa a poção selecionada no limite de HP", automation.auto_potion),
+                    "Usa a poção selecionada no limite de HP",
+                    all(&|s| s.state.automation.auto_potion.unwrap_or(false))),
                 automation_row("autoRevive", "Usar Revive ao desmaiar",
-                    "Revive Pokémon quando o ativo desmaia", automation.auto_revive),
+                    "Revive Pokémon quando o ativo desmaia",
+                    all(&|s| s.state.automation.auto_revive.unwrap_or(false))),
                 automation_row("ballUntilCapture", "Lançar até Capturar",
                     "Envia Balls até conseguir uma captura",
-                    Some(matches!(capture, domain::CaptureMode::UntilCapture))),
+                    all(&|s| matches!(&s.state.capture_mode, domain::CaptureMode::UntilCapture))),
                 automation_row("ballContinuous", "Lançar sem Parar",
                     "Mantém lançamentos de Balls enquanto ativa",
-                    Some(matches!(capture, domain::CaptureMode::Continuous))),
+                    all(&|s| matches!(&s.state.capture_mode, domain::CaptureMode::Continuous))),
                 automation_row("autoVendaLoot", "Venda Automática",
-                    "Vende loot comum automaticamente", automation.auto_sale_loot),
+                    "Vende loot comum automaticamente",
+                    all(&|s| s.state.automation.auto_sale_loot.unwrap_or(false))),
                 automation_row("returnToHunt", "Voltar à Hunt",
-                    "Retoma a caça após morte ou reset", automation.auto_return_hunt),
+                    "Retoma a caça após morte ou reset",
+                    all(&|s| s.state.automation.auto_return_hunt.unwrap_or(false))),
                 automation_row("autoBuyPotion", "Compra Automática de Poções",
-                    "Reabastece as poções configuradas", Some(potion_buy)),
+                    "Reabastece as poções configuradas",
+                    all(&|s| s.state.auto_buy_rules.iter().any(|r|
+                        r.enabled && matches!(&r.kind, domain::AutoBuyKind::Item)))),
                 automation_row("autoBuyBall", "Compra Automática de Balls",
-                    "Reabastece as Balls configuradas", Some(ball_buy)),
+                    "Reabastece as Balls configuradas",
+                    all(&|s| s.state.auto_buy_rules.iter().any(|r|
+                        r.enabled && matches!(&r.kind, domain::AutoBuyKind::Ball)))),
             ]));
         } else {
             *self.last_editor_account.lock() = None;
@@ -1081,6 +1109,36 @@ fn parse_sale_target(input: &str) -> Option<(String, u64)> {
     Some((account.into(), number))
 }
 
+fn automation_target_ids(ui: &ManagerWindow) -> Vec<String> {
+    [
+        ui.get_automation_account_0(),
+        ui.get_automation_account_1(),
+        ui.get_automation_account_2(),
+        ui.get_automation_account_3(),
+    ].into_iter().enumerate()
+        .filter_map(|(index, selected)| selected
+            .then(|| format!("Game{}", index + 1)))
+        .collect()
+}
+
+fn apply_to_automation_accounts(
+    ui: &ManagerWindow,
+    action: impl Fn(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    let accounts = automation_target_ids(ui);
+    if accounts.is_empty() {
+        return Err("Selecione ao menos uma conta".into());
+    }
+    let mut failed = Vec::new();
+    for id in &accounts {
+        if let Err(error) = action(id) {
+            failed.push(format!("{id}: {error}"));
+        }
+    }
+    if failed.is_empty() { Ok(()) }
+    else { Err(failed.join(" • ")) }
+}
+
 fn format_event_time(unix: u64) -> String {
     // Game logs use Unix milliseconds. Keep seconds compatibility for
     // older receipts without losing their calendar date.
@@ -1319,30 +1377,31 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     let automation_core = core.clone();
     ui.on_toggle_automation(move |field, enabled| {
         if let Some(ui) = weak.upgrade() {
-            let id = automation_core.account_id(ui.get_selected_account());
-            let result: Result<(), String> = match field.as_str() {
-                "autoVendaLoot" => automation_core.accounts
-                    .set_auto_sale(&id, enabled).map_err(|e| e.to_string()),
-                "ballUntilCapture" => automation_core.accounts.set_capture_mode(&id,
-                    if enabled { domain::CaptureMode::UntilCapture }
-                    else { domain::CaptureMode::Off }).map_err(|e| e.to_string()),
-                "ballContinuous" => automation_core.accounts.set_capture_mode(&id,
-                    if enabled { domain::CaptureMode::Continuous }
-                    else { domain::CaptureMode::Off }).map_err(|e| e.to_string()),
-                "autoBuyPotion" => automation_core.accounts.set_auto_buy_enabled(&id,
-                    domain::AutoBuyKind::Item, enabled).map_err(|e| e.to_string()),
-                "autoBuyBall" => automation_core.accounts.set_auto_buy_enabled(&id,
-                    domain::AutoBuyKind::Ball, enabled).map_err(|e| e.to_string()),
-                "returnToHunt" | "autoPotion" | "autoRevive" => {
-                    let kind = if field.as_str() == "returnToHunt" {
-                        "autoVoltarHunt"
-                    } else { field.as_str() };
-                    automation_core.accounts.set_automation_value(&id,
-                        kind, serde_json::Value::Bool(enabled))
-                        .map_err(|e| e.to_string())
+            let result = apply_to_automation_accounts(&ui, |id| {
+                match field.as_str() {
+                    "autoVendaLoot" => automation_core.accounts
+                        .set_auto_sale(id, enabled).map_err(|e| e.to_string()),
+                    "ballUntilCapture" => automation_core.accounts.set_capture_mode(id,
+                        if enabled { domain::CaptureMode::UntilCapture }
+                        else { domain::CaptureMode::Off }).map_err(|e| e.to_string()),
+                    "ballContinuous" => automation_core.accounts.set_capture_mode(id,
+                        if enabled { domain::CaptureMode::Continuous }
+                        else { domain::CaptureMode::Off }).map_err(|e| e.to_string()),
+                    "autoBuyPotion" => automation_core.accounts.set_auto_buy_enabled(id,
+                        domain::AutoBuyKind::Item, enabled).map_err(|e| e.to_string()),
+                    "autoBuyBall" => automation_core.accounts.set_auto_buy_enabled(id,
+                        domain::AutoBuyKind::Ball, enabled).map_err(|e| e.to_string()),
+                    "returnToHunt" | "autoPotion" | "autoRevive" => {
+                        let kind = if field.as_str() == "returnToHunt" {
+                            "autoVoltarHunt"
+                        } else { field.as_str() };
+                        automation_core.accounts.set_automation_value(
+                            id, kind, serde_json::Value::Bool(enabled)
+                        ).map_err(|e| e.to_string())
+                    }
+                    _ => Err("Automação nativa não suportada".into()),
                 }
-                _ => Err("Automação nativa não suportada".into()),
-            };
+            });
             ui.set_automation_last_error(
                 result.err().unwrap_or_default().into()
             );
@@ -1352,13 +1411,14 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     let threshold_core = core.clone();
     ui.on_set_potion_threshold(move |percent| {
         if let Some(ui) = weak.upgrade() {
-            let id = threshold_core.account_id(ui.get_selected_account());
             let clamped = percent.clamp(10, 100);
-            let result = threshold_core.accounts.set_automation_value(
-                &id, "hpLimiar", serde_json::Value::from(clamped as f64 / 100.0)
-            );
+            let result = apply_to_automation_accounts(&ui, |id| {
+                threshold_core.accounts.set_automation_value(
+                    id, "hpLimiar", serde_json::Value::from(clamped as f64 / 100.0)
+                ).map_err(|error| error.to_string())
+            });
             ui.set_automation_last_error(
-                result.err().map(|e| e.to_string()).unwrap_or_default().into()
+                result.err().unwrap_or_default().into()
             );
         }
     });
@@ -1366,7 +1426,6 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     let selection_core = core.clone();
     ui.on_save_combat_selection(move |kind, raw| {
         if let Some(ui) = weak.upgrade() {
-            let id = selection_core.account_id(ui.get_selected_account());
             let result: Result<(), String> = (|| {
                 let mut parsed = Vec::new();
                 for part in raw.split(',') {
@@ -1387,8 +1446,11 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
                     "ball" => domain::AutoBuyKind::Ball,
                     _ => return Err("Categoria de item inválida".into()),
                 };
-                selection_core.accounts.set_automation_ids(&id, category, parsed)
-                    .map_err(|e| e.to_string())
+                apply_to_automation_accounts(&ui, |id| {
+                    selection_core.accounts.set_automation_ids(
+                        id, category.clone(), parsed.clone()
+                    ).map_err(|error| error.to_string())
+                })
             })();
             ui.set_automation_last_error(
                 result.err().unwrap_or_default().into()
@@ -1399,7 +1461,6 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     let refill_core = core.clone();
     ui.on_update_refill_rule(move || {
         if let Some(ui) = weak.upgrade() {
-            let account = refill_core.account_id(ui.get_selected_account());
             let result: Result<(), String> = (|| {
                 let id: u64 = ui.get_refill_item_id().trim().parse()
                     .map_err(|_| "ID do item inválido".to_string())?;
@@ -1411,12 +1472,14 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
                 let kind = if ui.get_refill_kind() == 0 {
                     domain::AutoBuyKind::Item
                 } else { domain::AutoBuyKind::Ball };
-                refill_core.accounts.update_auto_buy_rule(
-                    &account, kind, id, minimum, quantity
-                ).map_err(|error| error.to_string())
+                apply_to_automation_accounts(&ui, |account| {
+                    refill_core.accounts.update_auto_buy_rule(
+                        account, kind.clone(), id, minimum, quantity
+                    ).map_err(|error| error.to_string())
+                })
             })();
             ui.set_automation_last_error(match result {
-                Ok(()) => "Regra salva; ative a compra automática para usá-la.".into(),
+                Ok(()) => "Regras enviadas às contas selecionadas; ative o restock separadamente.".into(),
                 Err(error) => error.into(),
             });
         }
@@ -1425,10 +1488,17 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     let center_core = core.clone();
     ui.on_return_center(move || {
         if let Some(ui) = weak.upgrade() {
-            let id = center_core.account_id(ui.get_selected_account());
-            if let Err(e) = center_core.accounts.go_center(&id) {
-                ui.set_status_line(e.to_string().into());
-            }
+            let result = if ui.get_page() == 2 && !ui.get_showing_detail() {
+                apply_to_automation_accounts(&ui, |id|
+                    center_core.accounts.go_center(id).map_err(|e| e.to_string()))
+            } else {
+                let id = center_core.account_id(ui.get_selected_account());
+                center_core.accounts.go_center(&id).map_err(|e| e.to_string())
+            };
+            ui.set_status_line(match result {
+                Ok(()) => "Center solicitado; aguardando confirmação do jogo.".into(),
+                Err(error) => error.into(),
+            });
         }
     });
     let weak = ui.as_weak();

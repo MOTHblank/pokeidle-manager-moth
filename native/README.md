@@ -208,6 +208,18 @@ Disabling developer mode clears captured frames and stops collecting them;
 no raw authentication frames are stored on disk. The inspector remains
 opt-in so the regular live transport does not pay for frame capture.
 
+## Multi-account Automations (React parity)
+
+Automações now uses the original React-style account chips with Select All
+and independent selection for Game1–Game4. Its eight automation cards are
+arranged in a responsive two-column wrapping layout. Switches are considered
+enabled only if all selected account states confirm the setting, rather than
+mirroring an arbitrary profile. Potion/Ball preferences, HP thresholds,
+per-item replenishment rules and Center navigation send their existing native
+commands to each selected account, reporting individual profile failures.
+An empty selection performs no commands. Hunt recommendations remain
+account-specific in Onde Caçar.
+
 ## React Dashboard visual parity
 
 The Dashboard follows the original desktop navigation order and positions
