@@ -1,5 +1,11 @@
 import { ScrollView, LineEdit, ListView } from "std-widgets.slint";
 
+export struct ProtocolFrameRow {
+    stamp: string,
+    direction: string,
+    payload: string,
+    preview: string,
+}
 export struct AccountRow {
     id: string,
     name: string,
@@ -440,6 +446,12 @@ export component ManagerWindow inherits Window {
     in-out property <string> connected-accounts: "0/4";
     in-out property <string> status-line: "Pronto";
     in-out property <string> native-version: "—";
+    in-out property <bool> developer-mode: false;
+    in-out property <bool> protocol-paused: false;
+    in-out property <int> protocol-direction: 0;
+    in-out property <string> protocol-search: "";
+    in-out property <string> protocol-count: "0/500";
+    in-out property <[ProtocolFrameRow]> protocol-frames: [];
     in-out property <int> ui-refresh-seconds: 1;
     in-out property <bool> restore-profiles-on-launch: true;
     in-out property <string> market-status: "Aguardando conexão";
@@ -486,6 +498,9 @@ export component ManagerWindow inherits Window {
 
     callback connect-account(int);
     callback save-native-settings(int, bool);
+    callback toggle-developer-mode(bool);
+    callback clear-protocol-frames;
+    callback copy-protocol-frame(string);
     callback travel(string);
     callback toggle-automation(string, bool);
     callback set-potion-threshold(int);
@@ -1557,6 +1572,131 @@ export component ManagerWindow inherits Window {
                             DisplayRow { heading: "Navegador"; subheading: "Apenas para autenticação"; value: "Firefox BiDi"; }
                             DisplayRow { heading: "Game WebSocket"; subheading: "Sem WebView2 ou Tauri"; value: "Rust nativo"; }
                             DisplayRow { heading: "Perfis"; subheading: "Moth Controller, Game1–Game4"; value: "27701–27704"; }
+                            SectionHeading { label: "Desenvolvimento"; }
+                            Rectangle {
+                                background: #422b35;
+                                border-color: #945a47;
+                                border-width: 2px;
+                                border-radius: 8px;
+                                height: 86px;
+                                HorizontalLayout {
+                                    padding: 11px;
+                                    spacing: 12px;
+                                    VerticalLayout {
+                                        spacing: 5px;
+                                        Text {
+                                            text: "Modo Desenvolvedor";
+                                            color: #fce5c4;
+                                            font-size: 16px;
+                                            font-weight: 750;
+                                        }
+                                        Text {
+                                            text: "Captura até 500 frames sanitizados na memória por conta.";
+                                            color: #c8ada3;
+                                            font-size: 12px;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                    WoodButton {
+                                        label: root.developer-mode ? "Ativado" : "Desativado";
+                                        selected: root.developer-mode;
+                                        clicked => { root.toggle-developer-mode(!root.developer-mode); }
+                                    }
+                                }
+                            }
+                            if root.developer-mode : VerticalLayout {
+                                spacing: 12px;
+                                SectionHeading { label: "Protocol Inspector"; }
+                                Text {
+                                    text: "Frames locais de jogo • " + root.protocol-count +
+                                        " • clique em um frame para copiar o conteúdo sanitizado";
+                                    color: #d4b5a7;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text { text: "Conta"; color: #e9c7b1; vertical-alignment: center; }
+                                    for account[i] in root.accounts : WoodButton {
+                                        label: account.name;
+                                        selected: root.selected-account == i;
+                                        clicked => {
+                                            root.selected-account = i;
+                                            root.selected-account-changed(i);
+                                        }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    WoodButton {
+                                        label: "Todos";
+                                        selected: root.protocol-direction == 0;
+                                        clicked => { root.protocol-direction = 0; }
+                                    }
+                                    WoodButton {
+                                        label: "C → S";
+                                        selected: root.protocol-direction == 1;
+                                        clicked => { root.protocol-direction = 1; }
+                                    }
+                                    WoodButton {
+                                        label: "S → C";
+                                        selected: root.protocol-direction == 2;
+                                        clicked => { root.protocol-direction = 2; }
+                                    }
+                                    LineEdit {
+                                        text <=> root.protocol-search;
+                                        placeholder-text: "Filtrar frames";
+                                        horizontal-stretch: 1;
+                                    }
+                                    WoodButton {
+                                        label: root.protocol-paused ? "Retomar" : "Pausar";
+                                        selected: root.protocol-paused;
+                                        clicked => { root.protocol-paused = !root.protocol-paused; }
+                                    }
+                                    WoodButton {
+                                        label: "Limpar";
+                                        clicked => { root.clear-protocol-frames(); }
+                                    }
+                                }
+                                ListView {
+                                    height: 425px;
+                                    for frame in root.protocol-frames : Rectangle {
+                                        height: 66px;
+                                        background: #352934;
+                                        border-width: 1px;
+                                        border-color: #785a4c;
+                                        HorizontalLayout {
+                                            padding: 9px;
+                                            spacing: 10px;
+                                            Text {
+                                                text: frame.stamp;
+                                                width: 90px;
+                                                color: #c6b5ae;
+                                                font-size: 11px;
+                                                vertical-alignment: center;
+                                            }
+                                            Text {
+                                                text: frame.direction;
+                                                width: 55px;
+                                                color: frame.direction == "C → S" ? #9cdabf : #edd298;
+                                                font-weight: 750;
+                                                vertical-alignment: center;
+                                            }
+                                            Text {
+                                                text: frame.preview;
+                                                color: #ddc9c0;
+                                                font-size: 12px;
+                                                wrap: word-wrap;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                            }
+                                        }
+                                        TouchArea {
+                                            clicked => { root.copy-protocol-frame(frame.payload); }
+                                        }
+                                    }
+                                }
+                            }
                             SectionHeading { label: "Estado do núcleo"; }
                             Text { text: root.status-line; color: #c5e4b9; wrap: word-wrap; }
                         }

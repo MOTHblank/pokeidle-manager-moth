@@ -912,6 +912,35 @@ impl NativeCore {
                 orbs: row.min_orb.map(format_num).unwrap_or_else(|| "—".into()).into(),
             }).collect()));
         }
+        if ui.get_page() == 6 && ui.get_developer_mode() && !ui.get_protocol_paused() {
+            let frames = self.accounts.protocol_frames(&id).unwrap_or_default();
+            let total = frames.len();
+            let search = ui.get_protocol_search().to_lowercase();
+            let direction = ui.get_protocol_direction();
+            let filtered: Vec<_> = frames.into_iter().filter(|entry| {
+                let matched_direction = match direction {
+                    1 => entry.direction == inspector::ProtocolDirection::ClientToServer,
+                    2 => entry.direction == inspector::ProtocolDirection::ServerToClient,
+                    _ => true,
+                };
+                matched_direction && entry.payload.to_lowercase().contains(&search)
+            }).map(|entry| {
+                let preview: String = entry.payload.chars().take(450).collect();
+                let truncated = entry.payload.chars().count() > 450;
+                ProtocolFrameRow {
+                    stamp: format_event_time(entry.timestamp_ms)
+                        .split(' ').last().unwrap_or("—").to_owned().into(),
+                    direction: if entry.direction == inspector::ProtocolDirection::ClientToServer {
+                        "C → S".into()
+                    } else { "S → C".into() },
+                    preview: if truncated { format!("{preview}…").into() }
+                        else { preview.into() },
+                    payload: entry.payload.into(),
+                }
+            }).collect();
+            ui.set_protocol_count(format!("{}/{} visíveis • até 500", filtered.len(), total).into());
+            ui.set_protocol_frames(model(filtered));
+        }
         if ui.get_page() == 5 {
             let directory = self.accounts.lives_snapshot();
             ui.set_twitch_irc_status(self.twitch.state(&id).display().into());
@@ -1047,6 +1076,50 @@ async fn authenticate(
 }
 
 fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
+    let weak = ui.as_weak();
+    let developer_core = core.clone();
+    ui.on_toggle_developer_mode(move |enabled| {
+        developer_core.accounts.set_inspector_enabled(enabled);
+        if let Some(ui) = weak.upgrade() {
+            ui.set_developer_mode(enabled);
+            ui.set_protocol_paused(false);
+            if !enabled {
+                ui.set_protocol_frames(model(Vec::new()));
+                ui.set_protocol_count("0/500".into());
+            }
+            ui.set_status_line(if enabled {
+                "Inspector ativo: capturas em memória, frames sanitizados".into()
+            } else {
+                "Inspector desativado: buffers descartados".into()
+            });
+        }
+    });
+    let weak = ui.as_weak();
+    let clear_core = core.clone();
+    ui.on_clear_protocol_frames(move || {
+        if let Some(ui) = weak.upgrade() {
+            let id = clear_core.account_id(ui.get_selected_account());
+            match clear_core.accounts.clear_protocol_frames(&id) {
+                Ok(()) => {
+                    ui.set_protocol_frames(model(Vec::new()));
+                    ui.set_protocol_count("0/500".into());
+                }
+                Err(error) => ui.set_status_line(error.to_string().into()),
+            }
+        }
+    });
+    let weak = ui.as_weak();
+    ui.on_copy_protocol_frame(move |content| {
+        if let Some(ui) = weak.upgrade() {
+            let result = arboard::Clipboard::new()
+                .and_then(|mut clipboard| clipboard.set_text(content.as_str()));
+            ui.set_status_line(if result.is_ok() {
+                "Frame sanitizado copiado".into()
+            } else {
+                "Não foi possível copiar o frame".into()
+            });
+        }
+    });
     let settings_core = core.clone();
     let weak = ui.as_weak();
     ui.on_save_native_settings(move |interval, restore| {
