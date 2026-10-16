@@ -18,6 +18,7 @@
 mod bidi;
 mod firefox;
 mod hunt_model;
+mod hunt_observations;
 mod preferences;
 mod twitch_irc;
 
@@ -48,6 +49,7 @@ struct NativeCore {
     hunt_reference: Arc<Mutex<Option<Arc<hunt_model::Reference>>>>,
     hunt_reference_status: Arc<Mutex<String>>,
     hunt_reference_started: AtomicBool,
+    hunt_observations: Mutex<hunt_observations::HpCollector>,
     sprites: Arc<Mutex<HashMap<u64, Image>>>,
     pending_sprites: Arc<Mutex<HashSet<u64>>>,
     sprite_rx: Mutex<mpsc::Receiver<SpriteReady>>,
@@ -124,6 +126,7 @@ impl NativeCore {
             hunt_reference: Arc::new(Mutex::new(None)),
             hunt_reference_status: Arc::new(Mutex::new("Aguardando dados de combate".into())),
             hunt_reference_started: AtomicBool::new(false),
+            hunt_observations: Mutex::new(hunt_observations::HpCollector::default()),
             sprites: Arc::new(Mutex::new(HashMap::new())),
             pending_sprites: Arc::new(Mutex::new(HashSet::new())),
             sprite_rx: Mutex::new(sprite_rx), sprite_tx,
@@ -325,6 +328,9 @@ impl NativeCore {
     fn refresh_ui(&self, ui: &ManagerWindow) {
         self.absorb_sprites();
         let lives = self.accounts.live_snapshots();
+        // Record only game-confirmed max HP from this account's current
+        // species/hunt/level; do not transpose samples between hunts.
+        self.hunt_observations.lock().absorb(&lives);
         let mut rows = Vec::with_capacity(4);
         let mut online_count = 0;
         let mut total_xp = 0_u64;
@@ -554,9 +560,10 @@ impl NativeCore {
         if ui.get_page() == 1 {
             self.load_hunt_reference();
             ui.set_hunt_model_status(self.hunt_reference_status.lock().clone().into());
+            let hp_samples = self.hunt_observations.lock().snapshot();
             let predictions = self.hunt_reference.lock().as_ref().map(|reference| {
                 self.accounts.snapshots().into_iter().find(|s| s.account.id == id)
-                    .map(|s| hunt_model::forecast(&s, reference))
+                    .map(|s| hunt_model::forecast(&s, reference, &hp_samples))
                     .unwrap_or_default()
             }).unwrap_or_default();
             let by_slug: HashMap<_,_> = predictions.iter()
