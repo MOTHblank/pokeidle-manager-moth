@@ -32,7 +32,7 @@ use twitch_irc::TwitchIrc;
 use market::MarketRuntime;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel};
-use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc}, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, atomic::{AtomicBool, AtomicU64, Ordering}, mpsc}, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 use tokio::runtime::{Builder, Runtime};
 
 pub(crate) const fn recovery_validation_mode_active() -> bool { false }
@@ -60,6 +60,9 @@ struct NativeCore {
     pending_item_art: Mutex<HashSet<String>>,
     item_rx: Mutex<mpsc::Receiver<ItemReady>>,
     item_tx: mpsc::Sender<ItemReady>,
+    asset_generation: Arc<AtomicU64>,
+    last_inventory_signature: Mutex<Option<String>>,
+    forecast_cache: Mutex<Option<(String, Vec<hunt_model::Forecast>)>>,
     twitch: TwitchIrc,
     runtime: Arc<Runtime>,
     profiles: Vec<Profile>,
@@ -136,6 +139,9 @@ impl NativeCore {
             pending_item_art: Mutex::new(HashSet::new()),
             item_rx: Mutex::new(item_rx),
             item_tx,
+            asset_generation: Arc::new(AtomicU64::new(0)),
+            last_inventory_signature: Mutex::new(None),
+            forecast_cache: Mutex::new(None),
             twitch, runtime, profiles, login,
             last_editor_account: Mutex::new(None),
             preferences, preferences_path,
@@ -200,9 +206,11 @@ impl NativeCore {
         }
         let loader = self.assets.clone();
         let sink = self.item_catalog.clone();
+        let generation = self.asset_generation.clone();
         self.runtime.spawn(async move {
             if let Ok(catalog) = loader.item_catalog().await {
                 *sink.lock() = Some(Arc::new(catalog));
+                generation.fetch_add(1, Ordering::AcqRel);
             }
         });
     }
@@ -242,6 +250,7 @@ impl NativeCore {
             if let Some((width, height, pixels)) = sprite.pixels {
                 let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, width, height);
                 self.sprites.lock().insert(sprite.looktype, Image::from_rgba8(buffer));
+                self.asset_generation.fetch_add(1, Ordering::AcqRel);
             }
             // Do not repeatedly fetch a non-existent looktype each UI poll.
         }
@@ -251,6 +260,7 @@ impl NativeCore {
             if let Some((width, height, pixels)) = item.pixels {
                 let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, width, height);
                 self.item_art.lock().insert(item.id, Image::from_rgba8(buffer));
+                self.asset_generation.fetch_add(1, Ordering::AcqRel);
             }
         }
     }
@@ -572,12 +582,37 @@ impl NativeCore {
         if ui.get_page() == 1 {
             self.load_hunt_reference();
             ui.set_hunt_model_status(self.hunt_reference_status.lock().clone().into());
-            let hp_samples = self.hunt_observations.lock().snapshot();
-            let predictions = self.hunt_reference.lock().as_ref().map(|reference| {
-                self.accounts.snapshots().into_iter().find(|s| s.account.id == id)
-                    .map(|s| hunt_model::forecast(&s, reference, &hp_samples))
-                    .unwrap_or_default()
-            }).unwrap_or_default();
+            let hp_generation = self.hunt_observations.lock().generation();
+            let reference_ready = self.hunt_reference.lock().is_some();
+            // This signature covers every state input consumed by forecast():
+            // selected lead, levels, XP modifiers, catalogue revision, VIP
+            // modifier, model availability and same-hunt HP observations.
+            let forecast_signature = if let Some(live) = snapshot {
+                format!("{}:{}:{}:{}:{}:{}:{}",
+                    id, live.revisions.hunt_options,
+                    serde_json::to_string(&live.state.active_pokemon).unwrap_or_default(),
+                    serde_json::to_string(&live.state.xp_bonus).unwrap_or_default(),
+                    live.state.level.unwrap_or(0),
+                    live.state.vip_active.unwrap_or(false),
+                    format!("{hp_generation}:{reference_ready}")
+                )
+            } else { format!("{id}:offline:{hp_generation}:{reference_ready}") };
+            let previously_computed = self.forecast_cache.lock().as_ref()
+                .and_then(|(signature, result)|
+                    (signature == &forecast_signature).then(|| result.clone()));
+            let predictions = if let Some(cached) = previously_computed {
+                cached
+            } else {
+                let hp_samples = self.hunt_observations.lock().snapshot();
+                let computed = self.hunt_reference.lock().as_ref().map(|reference| {
+                    self.accounts.snapshots().into_iter().find(|s| s.account.id == id)
+                        .map(|s| hunt_model::forecast(&s, reference, &hp_samples))
+                        .unwrap_or_default()
+                }).unwrap_or_default();
+                *self.forecast_cache.lock() =
+                    Some((forecast_signature, computed.clone()));
+                computed
+            };
             let by_slug: HashMap<_,_> = predictions.iter()
                 .map(|model| (model.slug.as_str(), model)).collect();
             let search = ui.get_hunt_search().to_lowercase();
@@ -628,6 +663,26 @@ impl NativeCore {
         }
         if ui.get_page() == 3 {
             self.start_item_catalog();
+            let revisions = lives.iter()
+                .filter(|live| ui.get_inventory_all_accounts()
+                    || live.account.id == id)
+                .map(|live| format!("{}:{}:{}",
+                    live.account.id, live.revisions.inventory, live.revisions.depot))
+                .collect::<Vec<_>>().join(",");
+            let signature = format!("{}:{}:{}:{}:{}:{}:{}:{}:{}",
+                id, ui.get_inventory_all_accounts(), ui.get_inventory_tab(),
+                ui.get_inventory_category(), ui.get_inventory_search(),
+                ui.get_pokemon_sort(), ui.get_pokemon_type_filter(),
+                ui.get_pokemon_min_iv(),
+                format!("{}:{}", revisions,
+                    self.asset_generation.load(Ordering::Acquire))
+            );
+            let needs_rebuild = {
+                let mut last = self.last_inventory_signature.lock();
+                if last.as_deref() == Some(signature.as_str()) { false }
+                else { *last = Some(signature); true }
+            };
+            if needs_rebuild {
             let tab = ui.get_inventory_tab();
             let search = ui.get_inventory_search().trim().to_lowercase();
             let all_accounts = ui.get_inventory_all_accounts();
@@ -755,6 +810,7 @@ impl NativeCore {
             } else {
                 ui.set_inventory_grid(model(Vec::new()));
                 ui.set_inventory(model(rows));
+            }
             }
         }
         if ui.get_page() == 4 {
