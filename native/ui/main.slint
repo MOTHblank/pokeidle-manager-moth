@@ -220,7 +220,8 @@ component DisplayRow inherits Rectangle {
 component ToggleRow inherits Rectangle {
     in property <AutomationRow> item;
     callback toggled(string, bool);
-    height: 82px;
+    width: 508px;
+    height: 92px;
     border-width: 1px;
     border-radius: 7px;
     border-color: #835140;
@@ -311,6 +312,11 @@ export component ManagerWindow inherits Window {
     in-out property <string> twitch-live-count: "0";
     in-out property <string> kick-live-count: "0";
     in-out property <[AutomationRow]> automations: [];
+    in-out property <bool> automation-account-0: true;
+    in-out property <bool> automation-account-1: false;
+    in-out property <bool> automation-account-2: false;
+    in-out property <bool> automation-account-3: false;
+    in-out property <int> automation-selected-count: 1;
     in-out property <int> potion-threshold-percent: 40;
     in-out property <string> potion-selection: "";
     in-out property <string> ball-selection: "";
@@ -1076,13 +1082,53 @@ export component ManagerWindow inherits Window {
 
                         if !root.showing-detail && root.page == 2 : VerticalLayout {
                             spacing: 13px;
-                            SectionHeading { label: "Controle das contas"; }
                             HorizontalLayout {
+                                spacing: 10px;
+                                SectionHeading { label: "CONTAS"; }
+                                Text {
+                                    text: root.automation-selected-count + " selecionada(s)";
+                                    color: #f2d08d;
+                                    font-size: 13px;
+                                    font-weight: 760;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                WoodButton {
+                                    label: "Selecionar todas";
+                                    selected: root.automation-selected-count == 4;
+                                    clicked => {
+                                        root.automation-account-0 = true;
+                                        root.automation-account-1 = true;
+                                        root.automation-account-2 = true;
+                                        root.automation-account-3 = true;
+                                        root.automation-selected-count = 4;
+                                    }
+                                }
                                 for account[i] in root.accounts : WoodButton {
                                     label: account.name;
-                                    selected: root.selected-account == i;
-                                    clicked => { root.selected-account = i; root.selected-account-changed(i); }
+                                    selected: i == 0 ? root.automation-account-0
+                                        : i == 1 ? root.automation-account-1
+                                        : i == 2 ? root.automation-account-2
+                                        : root.automation-account-3;
+                                    clicked => {
+                                        if i == 0 { root.automation-account-0 = !root.automation-account-0; }
+                                        else if i == 1 { root.automation-account-1 = !root.automation-account-1; }
+                                        else if i == 2 { root.automation-account-2 = !root.automation-account-2; }
+                                        else { root.automation-account-3 = !root.automation-account-3; }
+                                        root.automation-selected-count = (root.automation-account-0 ? 1 : 0)
+                                            + (root.automation-account-1 ? 1 : 0)
+                                            + (root.automation-account-2 ? 1 : 0)
+                                            + (root.automation-account-3 ? 1 : 0);
+                                    }
                                 }
+                            }
+                            Text {
+                                text: "As mudanças de automação, Potion/Ball e restock serão aplicadas a todas as contas selecionadas.";
+                                color: #c6aba4;
+                                font-size: 12px;
+                                wrap: word-wrap;
                             }
                             SectionHeading { label: "Movimentação"; }
                             Rectangle {
@@ -1143,9 +1189,13 @@ export component ManagerWindow inherits Window {
                                 color: #f0a79b;
                                 wrap: word-wrap;
                             }
-                            for automation in root.automations : ToggleRow {
-                                item: automation;
-                                toggled(key, value) => { root.toggle-automation(key, value); }
+                            FlexboxLayout {
+                                spacing: 11px;
+                                flex-wrap: wrap;
+                                for automation in root.automations : ToggleRow {
+                                    item: automation;
+                                    toggled(key, value) => { root.toggle-automation(key, value); }
+                                }
                             }
                             SectionHeading { label: "Reabastecimento por item"; }
                             Rectangle {
