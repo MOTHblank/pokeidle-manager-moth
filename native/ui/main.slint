@@ -58,6 +58,7 @@ export struct InventoryGridRow {
     cells: [InventoryRow],
 }
 export struct MarketRow {
+    id: string,
     name: string,
     listings: string,
     quantity: string,
@@ -90,10 +91,17 @@ export struct SessionDropRow {
     artwork: image,
     has-artwork: bool,
 }
+export struct MarketItemChoice {
+    id: string,
+    name: string,
+    prices: string,
+}
 export struct SniperRuleRow {
     id: string,
     label: string,
     price: string,
+    current-price: string,
+    balance: string,
     budget: string,
     spent: string,
     quantity: string,
@@ -318,6 +326,10 @@ export component ManagerWindow inherits Window {
     in-out property <string> market-history-status: "Aguardando histórico";
     in-out property <[SniperRuleRow]> sniper-rules: [];
     in-out property <string> sniper-item-id: "";
+    in-out property <string> sniper-item-search: "";
+    in-out property <[MarketItemChoice]> sniper-items: [];
+    in-out property <string> sniper-editing-id: "";
+    in-out property <bool> sniper-picker-open: false;
     in-out property <string> sniper-max-price: "";
     in-out property <string> sniper-budget: "0";
     in-out property <string> sniper-min-balance: "0";
@@ -422,6 +434,7 @@ export component ManagerWindow inherits Window {
     callback return-center;
     callback refresh-market;
     callback save-sniper-rule;
+    callback edit-sniper-rule(string);
     callback delete-sniper-rule(string);
     callback toggle-sniper-rule(string, bool);
     callback open-stream(string, string);
@@ -1732,57 +1745,146 @@ export component ManagerWindow inherits Window {
                                 }
                             }
                             SectionHeading { label: "Compra automática — Sniper"; }
-                            HorizontalLayout {
-                                Text { text: "Conta"; color: #ebc9b5; vertical-alignment: center; }
-                                for account[i] in root.accounts : WoodButton {
-                                    label: account.name;
-                                    selected: root.selected-account == i;
-                                    clicked => { root.selected-account = i; root.selected-account-changed(i); }
-                                }
+                            Text {
+                                text: "Regras de item no estilo MothWatch: comprar o máximo de unidades disponíveis que couberem no preço, orçamento e saldo reservado.";
+                                color: #d7bda9; font-size: 12px; wrap: word-wrap;
                             }
                             Rectangle {
-                                height: 151px; background: #422733; border-width: 2px; border-color: #8f5441; border-radius: 8px;
+                                height: root.sniper-picker-open ? 345px : 230px;
+                                background: #422733;
+                                border-width: 2px; border-color: #a66a49;
+                                border-radius: 9px;
                                 VerticalLayout {
-                                    padding: 12px; spacing: 9px;
+                                    padding: 12px; spacing: 10px;
+                                    HorizontalLayout {
+                                        Text {
+                                            text: root.sniper-editing-id != "" ? "EDITAR COMPRA" : "NOVA COMPRA";
+                                            color: #f2c68d; font-size: 13px; font-weight: 760;
+                                        }
+                                        if root.sniper-editing-id != "" : WoodButton {
+                                            label: "Cancelar edição";
+                                            clicked => {
+                                                root.sniper-editing-id = "";
+                                                root.sniper-item-id = "";
+                                                root.sniper-item-search = "";
+                                                root.sniper-max-price = "";
+                                                root.sniper-budget = "0";
+                                                root.sniper-min-balance = "0";
+                                            }
+                                        }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 7px;
+                                        Text { text: "Conta"; color: #d6b7a6; vertical-alignment: center; }
+                                        for account[i] in root.accounts : WoodButton {
+                                            label: account.name;
+                                            selected: root.selected-account == i;
+                                            clicked => {
+                                                root.selected-account = i;
+                                                root.sniper-editing-id = "";
+                                                root.selected-account-changed(i);
+                                            }
+                                        }
+                                    }
                                     HorizontalLayout {
                                         spacing: 8px;
-                                        Text { text: "ID do item"; color: #ddbaa8; vertical-alignment: center; }
-                                        LineEdit { text <=> root.sniper-item-id; width: 120px; placeholder-text: "Ex.: 70032"; }
-                                        Text { text: "Preço máx. / unidade"; color: #ddbaa8; vertical-alignment: center; }
+                                        Text { text: "Item"; color: #d6b7a6; vertical-alignment: center; }
+                                        LineEdit {
+                                            text <=> root.sniper-item-search;
+                                            placeholder-text: "Nome ou ID do item";
+                                            horizontal-stretch: 1;
+                                        }
+                                        WoodButton {
+                                            label: root.sniper-picker-open ? "Fechar busca" : "Procurar";
+                                            clicked => { root.sniper-picker-open = !root.sniper-picker-open; }
+                                        }
+                                        Text {
+                                            text: root.sniper-item-id != "" ? "ID " + root.sniper-item-id : "Selecione um item";
+                                            color: root.sniper-item-id != "" ? #b4dfad : #ddb59e;
+                                            font-size: 12px;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    if root.sniper-picker-open : ListView {
+                                        height: 115px;
+                                        for option in root.sniper-items : Rectangle {
+                                            height: 36px;
+                                            background: #302331;
+                                            border-width: 1px; border-color: #74513f;
+                                            HorizontalLayout {
+                                                padding-left: 6px; padding-right: 6px; spacing: 8px;
+                                                Text { text: option.name; color: #f6e3c8; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+                                                Text { text: option.prices; color: #cdb6a7; font-size: 11px; vertical-alignment: center; }
+                                                WoodButton {
+                                                    height: 28px;
+                                                    label: "Usar";
+                                                    clicked => {
+                                                        root.sniper-item-id = option.id;
+                                                        root.sniper-item-search = option.name;
+                                                        root.sniper-picker-open = false;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: "Preço máximo / unidade"; color: #d6b7a6; vertical-alignment: center; }
                                         LineEdit { text <=> root.sniper-max-price; width: 125px; placeholder-text: "Preço"; }
-                                        WoodButton { label: root.sniper-currency == 0 ? "Gold" : "Orbs";
-                                            clicked => { root.sniper-currency = root.sniper-currency == 0 ? 1 : 0; } }
+                                        WoodButton {
+                                            label: root.sniper-currency == 0 ? "Gold" : "Gemas";
+                                            clicked => { root.sniper-currency = root.sniper-currency == 0 ? 1 : 0; }
+                                        }
+                                        Text { text: "Quantidade: máxima disponível"; color: #b8dab5; font-size: 12px; vertical-alignment: center; }
                                     }
                                     HorizontalLayout {
                                         spacing: 8px;
-                                        Text { text: "Orçamento (0=sem limite)"; color: #ddbaa8; vertical-alignment: center; }
-                                        LineEdit { text <=> root.sniper-budget; width: 130px; }
-                                        Text { text: "Saldo mínimo"; color: #ddbaa8; vertical-alignment: center; }
-                                        LineEdit { text <=> root.sniper-min-balance; width: 130px; }
-                                        WoodButton { label: "Salvar regra"; clicked => { root.save-sniper-rule(); } }
+                                        Text { text: "Limite acumulado (0 = ilimitado)"; color: #d6b7a6; vertical-alignment: center; }
+                                        LineEdit { text <=> root.sniper-budget; width: 120px; }
+                                        Text { text: "Saldo a reservar"; color: #d6b7a6; vertical-alignment: center; }
+                                        LineEdit { text <=> root.sniper-min-balance; width: 120px; }
+                                        WoodButton {
+                                            label: root.sniper-editing-id != "" ? "Salvar alterações" : "Criar compra";
+                                            clicked => { root.save-sniper-rule(); }
+                                        }
                                     }
-                                    Text { text: "O núcleo nativo processa ofertas e confirma compras pelo protocolo. Orçamento e saldo mínimo são por conta."; color: #b8a3a0; font-size: 12px; wrap: word-wrap; }
                                 }
                             }
                             SectionHeading { label: "Regras configuradas"; }
                             ListView {
-                                height: 300px;
+                                height: 350px;
                                 for rule in root.sniper-rules : Rectangle {
-                                    height: 73px; background: #392633; border-width: 1px; border-color: #965747;
-                                    HorizontalLayout {
-                                        padding: 10px; spacing: 12px;
-                                        VerticalLayout {
-                                            spacing: 5px;
-                                            Text { text: rule.label; color: #fff0d1; font-size: 14px; font-weight: 700; }
-                                            Text { text: "Máx. " + rule.price + "   •   Orçamento " + rule.budget +
-                                                "   •   Gasto " + rule.spent + "   •   Comprado " + rule.quantity; color: #ceb2a6; font-size: 12px; }
+                                    height: 102px;
+                                    background: #392633; border-width: 1px;
+                                    border-color: rule.enabled ? #a56b49 : #6c524a;
+                                    border-radius: 7px;
+                                    VerticalLayout {
+                                        padding: 9px; spacing: 6px;
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            Text { text: rule.label; color: #fff0d1; font-size: 15px; font-weight: 730; horizontal-stretch: 1; }
+                                            Text { text: rule.enabled ? "●  Ativa" : "●  Pausada";
+                                                color: rule.enabled ? #ace2b2 : #d2aba3; font-size: 12px; }
                                         }
-                                        WoodButton {
-                                            label: rule.enabled ? "Ativa" : "Pausada";
-                                            selected: rule.enabled;
-                                            clicked => { root.toggle-sniper-rule(rule.id, !rule.enabled); }
+                                        HorizontalLayout {
+                                            spacing: 16px;
+                                            Text { text: "Teto/un  " + rule.price; color: #f8ce81; font-size: 12px; }
+                                            Text { text: "Menor oferta  " + rule.current-price; color: #bfe2b8; font-size: 12px; }
+                                            Text { text: "Compradas  " + rule.quantity; color: #e6cab0; font-size: 12px; }
+                                            Text { text: "Orçamento restante  " + rule.balance; color: #e8bb97; font-size: 12px; }
                                         }
-                                        WoodButton { label: "Excluir"; clicked => { root.delete-sniper-rule(rule.id); } }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            Text { text: "Limite " + rule.budget + "  •  Gasto " + rule.spent; color: #c6aba2; font-size: 11px; horizontal-stretch: 1; }
+                                            WoodButton {
+                                                height: 29px;
+                                                label: rule.enabled ? "Pausar" : "Ativar";
+                                                selected: rule.enabled;
+                                                clicked => { root.toggle-sniper-rule(rule.id, !rule.enabled); }
+                                            }
+                                            WoodButton { height: 29px; label: "Editar"; clicked => { root.edit-sniper-rule(rule.id); } }
+                                            WoodButton { height: 29px; label: "Excluir"; clicked => { root.delete-sniper-rule(rule.id); } }
+                                        }
                                     }
                                 }
                             }
