@@ -17,6 +17,7 @@
 
 mod bidi;
 mod firefox;
+mod hunt_model;
 mod twitch_irc;
 
 slint::include_modules!();
@@ -29,7 +30,7 @@ use twitch_irc::TwitchIrc;
 use market::MarketRuntime;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel};
-use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, mpsc}, time::Duration};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc}, time::Duration};
 use tokio::runtime::{Builder, Runtime};
 
 pub(crate) const fn recovery_validation_mode_active() -> bool { false }
@@ -43,6 +44,9 @@ struct NativeCore {
     accounts: AccountManager,
     market: MarketRuntime,
     assets: assets::GameAssetService,
+    hunt_reference: Arc<Mutex<Option<Arc<hunt_model::Reference>>>>,
+    hunt_reference_status: Arc<Mutex<String>>,
+    hunt_reference_started: AtomicBool,
     sprites: Arc<Mutex<HashMap<u64, Image>>>,
     pending_sprites: Arc<Mutex<HashSet<u64>>>,
     sprite_rx: Mutex<mpsc::Receiver<SpriteReady>>,
@@ -100,11 +104,36 @@ impl NativeCore {
         }
         Ok(Self {
             accounts, market, assets,
+            hunt_reference: Arc::new(Mutex::new(None)),
+            hunt_reference_status: Arc::new(Mutex::new("Aguardando dados de combate".into())),
+            hunt_reference_started: AtomicBool::new(false),
             sprites: Arc::new(Mutex::new(HashMap::new())),
             pending_sprites: Arc::new(Mutex::new(HashSet::new())),
             sprite_rx: Mutex::new(sprite_rx), sprite_tx,
             twitch, runtime, profiles, login
         })
+    }
+
+    fn load_hunt_reference(&self) {
+        if self.hunt_reference.lock().is_some() ||
+            self.hunt_reference_started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        *self.hunt_reference_status.lock() = "Obtendo referência de combate…".into();
+        let assets = self.assets.clone();
+        let reference = self.hunt_reference.clone();
+        let status = self.hunt_reference_status.clone();
+        self.runtime.spawn(async move {
+            match assets.where_to_hunt_reference().await.and_then(hunt_model::Reference::parse) {
+                Ok(value) => {
+                    *reference.lock() = Some(Arc::new(value));
+                    *status.lock() = "Modelo nativo por rotação sustentada; previsão, não medição".into();
+                }
+                Err(_) => {
+                    *status.lock() = "Referência indisponível: não exibir previsões sem dados".into();
+                }
+            }
+        });
     }
 
     fn sprite(&self, looktype: Option<u64>) -> (Image, bool) {
@@ -297,10 +326,33 @@ impl NativeCore {
         }
 
         if ui.get_page() == 1 {
+            self.load_hunt_reference();
+            ui.set_hunt_model_status(self.hunt_reference_status.lock().clone().into());
+            let predictions = self.hunt_reference.lock().as_ref().map(|reference| {
+                self.accounts.snapshots().into_iter().find(|s| s.account.id == id)
+                    .map(|s| hunt_model::forecast(&s, reference))
+                    .unwrap_or_default()
+            }).unwrap_or_default();
+            let by_slug: HashMap<_,_> = predictions.iter()
+                .map(|model| (model.slug.as_str(), model)).collect();
             let search = ui.get_hunt_search().to_lowercase();
             let hunts = self.accounts.account_hunt_options(&id, None)
                 .ok().and_then(|res| res.data).unwrap_or_default();
             let current = snapshot.and_then(|s| s.state.hunt_slug.as_deref());
+            let ranking = ui.get_hunt_ranking_mode();
+            let mut hunts = hunts;
+            hunts.sort_by(|a,b| {
+                let value = |slug: &str| -> u64 {
+                    let Some(forecast) = by_slug.get(slug) else { return 0 };
+                    match ranking {
+                        1 => forecast.pokemon_xp_h,
+                        2 => forecast.gold_h,
+                        _ => forecast.trainer_xp_h,
+                    }.unwrap_or_default()
+                };
+                value(b.slug.as_str()).cmp(&value(a.slug.as_str()))
+                    .then(a.level.cmp(&b.level))
+            });
             let mut rows: Vec<_> = hunts.into_iter().filter(|h| {
                 search.trim().is_empty()
                     || h.name.to_lowercase().contains(search.as_str())
@@ -309,11 +361,23 @@ impl NativeCore {
                     || h.area.as_deref().unwrap_or("").to_lowercase().contains(search.as_str())
             }).map(|h| HuntRow {
                 current: current == Some(h.slug.as_str()),
-                slug: h.slug.into(), name: h.name.into(),
+                name: h.name.into(),
                 level: h.level.map(|v| format!("Lv. {v}")).unwrap_or_default().into(),
                 region: h.region.unwrap_or_default().into(),
                 area: h.area.unwrap_or_default().into(),
                 species: format!("{} espécies", h.species.len()).into(),
+                xp_trainer: by_slug.get(h.slug.as_str())
+                    .and_then(|m| m.trainer_xp_h).map(format_num)
+                    .unwrap_or_else(|| "—".into()).into(),
+                xp_pokemon: by_slug.get(h.slug.as_str())
+                    .and_then(|m| m.pokemon_xp_h).map(format_num)
+                    .unwrap_or_else(|| "—".into()).into(),
+                gold_rate: by_slug.get(h.slug.as_str())
+                    .and_then(|m| m.gold_h).map(format_num)
+                    .unwrap_or_else(|| "—".into()).into(),
+                confidence: by_slug.get(h.slug.as_str())
+                    .map(|m| m.confidence).unwrap_or("Sem modelo").into(),
+                slug: h.slug.into(),
             }).collect();
             rows.truncate(200);
             ui.set_hunts(model(rows));

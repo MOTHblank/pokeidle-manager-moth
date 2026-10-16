@@ -29,6 +29,10 @@ export struct HuntRow {
     region: string,
     area: string,
     species: string,
+    xp-trainer: string,
+    xp-pokemon: string,
+    gold-rate: string,
+    confidence: string,
     current: bool,
 }
 export struct InventoryRow {
@@ -319,6 +323,8 @@ export component ManagerWindow inherits Window {
     in-out property <int> selected-account: 0;
     in-out property <bool> showing-detail: false;
     in-out property <string> hunt-search: "";
+    in-out property <int> hunt-ranking-mode: 0;
+    in-out property <string> hunt-model-status: "Calculando..." ;
     in-out property <string> inventory-search: "";
     in-out property <int> inventory-tab: 0;
     in-out property <bool> session-mode: false;
@@ -534,9 +540,16 @@ export component ManagerWindow inherits Window {
                                 Text { text: "Buscar hunt"; color: #dbb4a3; vertical-alignment: center; }
                                 LineEdit { text <=> root.hunt-search; placeholder-text: "Nome, região ou área…"; horizontal-stretch: 1; }
                             }
+                            HorizontalLayout {
+                                Text { text: "Ranking"; color: #e8cfaa; vertical-alignment: center; }
+                                WoodButton { label: "XP Treinador"; selected: root.hunt-ranking-mode == 0; clicked => { root.hunt-ranking-mode = 0; } }
+                                WoodButton { label: "XP Pokémon"; selected: root.hunt-ranking-mode == 1; clicked => { root.hunt-ranking-mode = 1; } }
+                                WoodButton { label: "Gold"; selected: root.hunt-ranking-mode == 2; clicked => { root.hunt-ranking-mode = 2; } }
+                            }
+                            Text { text: root.hunt-model-status; color: #bcab9c; font-size: 12px; }
                             SectionHeading { label: "Locais disponíveis"; }
                             for hunt in root.hunts : Rectangle {
-                                height: 73px; border-width: 1px; border-color: #895442; background: #38242f;
+                                height: 91px; border-width: 1px; border-color: #895442; background: #38242f;
                                 HorizontalLayout {
                                     padding: 10px; spacing: 12px;
                                     Rectangle {
@@ -547,11 +560,12 @@ export component ManagerWindow inherits Window {
                                         spacing: 5px;
                                         Text { text: hunt.name + "  •  " + hunt.level; color: #ffe9c7; font-size: 15px; font-weight: 720; }
                                         Text { text: hunt.region + "  •  " + hunt.area + "  •  " + hunt.species; color: #c6a39d; font-size: 12px; }
+                                        Text { text: "Treinador " + hunt.xp-trainer + " XP/h   •   Pokémon " + hunt.xp-pokemon + " XP/h   •   Gold " + hunt.gold-rate + "/h   •   " + hunt.confidence; color: #9edec0; font-size: 12px; }
                                     }
                                     WoodButton { label: hunt.current ? "Atual" : "Ir para hunt"; enabled: !hunt.current && root.current-status == "Online"; clicked => { root.travel(hunt.slug); } }
                                 }
                             }
-                            Text { text: "Estimativas avançadas do Hunt Atlas serão incorporadas ao modelo nativo; nenhuma taxa não medida é apresentada como medição."; color: #baa5a3; font-size: 12px; wrap: word-wrap; }
+                            Text { text: "Os números são PREVISÕES por rotação sustentada (Hunt Atlas), não taxas medidas no servidor. XP do Treinador e Pokémon são exibidos separadamente."; color: #baa5a3; font-size: 12px; wrap: word-wrap; }
                         }
 
                         if !root.showing-detail && root.page == 2 : VerticalLayout {

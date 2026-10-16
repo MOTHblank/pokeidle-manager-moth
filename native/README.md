@@ -23,8 +23,10 @@ comparison throughout the work.
   and details, with no blocking network I/O on the UI thread.
 - Native themed dashboard metric cards and four account cards with
   clickable **Detalhes** navigation, back navigation and session toggle.
-- **Onde Caçar** with per-account picker, searchable real hunt catalogue
-  and game-confirmed, combat-lock-aware native **Ir para hunt** action.
+- **Onde Caçar** with per-account picker, searchable real hunt catalogue,
+  native sustained-rotation estimates inspired by Hunt Atlas, trainer/Pokémon
+  XP shown separately and explicit model-vs-measurement labeling, three-way
+  XP/Gold ranking, and the existing combat-lock-aware **Ir para hunt** action.
 - **Automações** route, account picker, selected native automation
   toggles, Centro Pokémon and Where-to-hunt navigation.
 - **Inventários** route with item/ball/Pokémon tabs and search backed
@@ -92,3 +94,16 @@ with PONG, stale connections are re-established, and no video is loaded.
 the game awards any Twitch bonus. Displayed bonus values must originate from
 the game's authoritative state. A proper native Twitch authorization and
 verified game-bonus end-to-end path remain necessary for final parity.
+
+## Hunt forecast trust boundary
+
+The hunt model uses the original Manager's read-only reference fetch and
+extracts game-species base stats, typed moves, effective wild HP and spawn
+weights. A bounded, warmup-discarding simulation shares skill cooldowns
+between encounters, includes basic attacks, the game's attack global lock
+and conservative wave/action pacing from Hunt Atlas. Trainer and Pokémon
+XP multipliers are always applied separately. Where data are incomplete, the
+UI shows a dash rather than fabricating a rate. Forecast rates are **not**
+server-measured observations. Future validation against live battle traces
+must precede declaring the model accurate; moving hunts does not depend
+on prediction completeness.
