@@ -16,6 +16,7 @@
 
 mod bidi;
 mod firefox;
+mod twitch_irc;
 
 slint::include_modules!();
 
@@ -23,6 +24,7 @@ use accounts::{AccountManager, new_record};
 use connection::ConnectionManager;
 use domain::{AccountRuntimeState, ConnectionOwner, ConnectionStatus};
 use firefox::Profile;
+use twitch_irc::TwitchIrc;
 use market::MarketRuntime;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
@@ -39,6 +41,7 @@ struct LoginState {
 struct NativeCore {
     accounts: AccountManager,
     market: MarketRuntime,
+    twitch: TwitchIrc,
     runtime: Arc<Runtime>,
     profiles: Vec<Profile>,
     login: Vec<Arc<Mutex<LoginState>>>,
@@ -67,11 +70,22 @@ impl NativeCore {
         let db = persistence::open_and_migrate(&dir.join("manager.sqlite"))
             .map_err(|e| e.to_string())?;
         let market = MarketRuntime::new(accounts.clone(), Arc::new(Mutex::new(db)));
+        let twitch = TwitchIrc::default();
         {
             let _enter = runtime.enter();
             market.start();
+            // OAuth material is read only from the current process environment.
+            // There are no Twitch browser tabs, no userscript and no video.
+            for profile in &profiles {
+                let id = profile.id();
+                let nick = std::env::var(format!("MOTH_TWITCH_NICK_{}", id.to_uppercase()));
+                let token = std::env::var(format!("MOTH_TWITCH_OAUTH_{}", id.to_uppercase()));
+                if let (Ok(nick), Ok(token)) = (nick, token) {
+                    let _ = twitch.configure(id, nick, token);
+                }
+            }
         }
-        Ok(Self { accounts, market, runtime, profiles, login })
+        Ok(Self { accounts, market, twitch, runtime, profiles, login })
     }
 
     fn login(&self, index: usize) {
@@ -187,6 +201,14 @@ impl NativeCore {
         let login = self.login[index].lock();
         ui.set_status_line(login.message.clone().into());
         drop(login);
+        // Reconcile IRC membership against fresh game directory data, not
+        // against Firefox/Violentmonkey state or an embedded Twitch tab.
+        let directory = self.accounts.lives_snapshot();
+        let channels: Vec<String> = directory.twitch.iter()
+            .map(|channel| channel.login.clone()).collect();
+        for profile in &self.profiles {
+            self.twitch.set_channels(&profile.id(), channels.iter().map(String::as_str));
+        }
 
         if let Some(s) = snapshot {
             let automation = &s.state.automation;
@@ -277,6 +299,7 @@ impl NativeCore {
         }
         if ui.get_page() == 5 {
             let directory = self.accounts.lives_snapshot();
+            ui.set_twitch_irc_status(self.twitch.state(&id).display().into());
             let twitch = directory.twitch.into_iter().map(|channel| LiveRow {
                 name: channel.name.into(),
                 channel: channel.login.into(),
@@ -450,6 +473,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = ManagerWindow::new()?;
     bind_actions(&ui, core.clone());
     core.refresh_ui(&ui);
+    let stop_irc = core.twitch.clone();
     let timer = Timer::default();
     let weak = ui.as_weak();
     timer.start(TimerMode::Repeated, Duration::from_millis(1100), move || {
@@ -458,5 +482,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     ui.run()?;
+    stop_irc.stop_all();
     Ok(())
 }
