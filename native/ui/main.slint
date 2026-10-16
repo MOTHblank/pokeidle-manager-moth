@@ -59,6 +59,26 @@ export struct MarketRow {
     gold: string,
     orbs: string,
 }
+export struct MarketHistoryRow {
+    date: string,
+    item: string,
+    participants: string,
+    amount: string,
+    currency: string,
+}
+export struct MarketTopRow {
+    item: string,
+    count: string,
+    quantity: string,
+    average: string,
+}
+export struct MarketPurchaseRow {
+    item: string,
+    outcome: string,
+    quantity: string,
+    cost: string,
+    currency: string,
+}
 export struct SessionDropRow {
     label: string,
     quantity: string,
@@ -376,6 +396,11 @@ export component ManagerWindow inherits Window {
     in-out property <[HuntRow]> hunts: [];
     in-out property <[InventoryRow]> inventory: [];
     in-out property <[MarketRow]> market: [];
+    in-out property <[MarketHistoryRow]> market-history: [];
+    in-out property <[MarketTopRow]> market-top-sales: [];
+    in-out property <[MarketPurchaseRow]> market-purchases: [];
+    in-out property <int> market-view: 0;
+    in-out property <string> market-history-status: "Aguardando histórico";
     in-out property <[SniperRuleRow]> sniper-rules: [];
     in-out property <string> sniper-item-id: "";
     in-out property <string> sniper-max-price: "";
@@ -1115,7 +1140,20 @@ export component ManagerWindow inherits Window {
                                 WoodButton { label: "Atualizar leitura"; clicked => { root.refresh-market(); } }
                             }
                             Text { text: root.market-status; color: #c9b4a3; }
-                            Rectangle {
+                            HorizontalLayout {
+                                spacing: 7px;
+                                WoodButton { label: "Ofertas"; selected: root.market-view == 0; clicked => { root.market-view = 0; } }
+                                WoodButton { label: "Histórico"; selected: root.market-view == 1; clicked => { root.market-view = 1; } }
+                                WoodButton { label: "Mais vendidos"; selected: root.market-view == 2; clicked => { root.market-view = 2; } }
+                                WoodButton { label: "Minhas compras"; selected: root.market-view == 3; clicked => { root.market-view = 3; } }
+                            }
+                            if root.market-view != 0 : Text {
+                                text: root.market-history-status;
+                                color: #d6baaf;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                            if root.market-view == 0 : Rectangle {
                                 height: 39px; background: #593441; border-color: #ac6847; border-width: 2px;
                                 HorizontalLayout {
                                     padding: 10px;
@@ -1126,7 +1164,7 @@ export component ManagerWindow inherits Window {
                                     Text { text: "Orbs"; color: #ffe8cc; font-weight: 700; }
                                 }
                             }
-                            ListView {
+                            if root.market-view == 0 : ListView {
                                 height: 490px;
                                 for entry in root.market : Rectangle {
                                     height: 49px; background: #392733; border-width: 1px; border-color: #6f4c41;
@@ -1140,7 +1178,55 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                             }
-                            SectionHeading { label: "Compra automática — Sniper"; }
+                            if root.market-view == 1 : ListView {
+                                height: 490px;
+                                for entry in root.market-history : Rectangle {
+                                    height: 70px; background: #3b2734; border-width: 1px; border-color: #885743;
+                                    HorizontalLayout {
+                                        padding: 9px; spacing: 10px;
+                                        VerticalLayout {
+                                            spacing: 5px;
+                                            Text { text: entry.item; color: #ffebce; font-size: 14px; font-weight: 720; }
+                                            Text { text: entry.participants; color: #c9aaa7; font-size: 12px; }
+                                        }
+                                        VerticalLayout {
+                                            spacing: 5px;
+                                            Text { text: entry.amount + " " + entry.currency; color: #f1c778; font-weight: 700; horizontal-alignment: right; }
+                                            Text { text: entry.date; color: #bdac9e; font-size: 12px; horizontal-alignment: right; }
+                                        }
+                                    }
+                                }
+                            }
+                            if root.market-view == 2 : ListView {
+                                height: 490px;
+                                for entry in root.market-top-sales : Rectangle {
+                                    height: 65px; background: #3b2734; border-width: 1px; border-color: #885743;
+                                    HorizontalLayout {
+                                        padding: 9px; spacing: 12px;
+                                        Text { text: entry.item; color: #ffeac7; font-weight: 730; horizontal-stretch: 1; }
+                                        Text { text: entry.count + " vendas"; color: #d1b4a4; }
+                                        Text { text: entry.quantity + " unidades"; color: #d1b4a4; }
+                                        Text { text: entry.average; color: #e9c476; }
+                                    }
+                                }
+                            }
+                            if root.market-view == 3 : ListView {
+                                height: 490px;
+                                for entry in root.market-purchases : Rectangle {
+                                    height: 71px; background: #3b2734; border-width: 1px; border-color: #885743;
+                                    HorizontalLayout {
+                                        padding: 9px; spacing: 12px;
+                                        VerticalLayout {
+                                            spacing: 4px;
+                                            Text { text: entry.item; color: #ffebce; font-weight: 700; }
+                                            Text { text: entry.outcome; color: #cfaea1; font-size: 12px; }
+                                        }
+                                        Text { text: entry.quantity + " unidades"; color: #e5c9ae; vertical-alignment: center; }
+                                        Text { text: entry.cost + " " + entry.currency; color: #ffc974; vertical-alignment: center; }
+                                    }
+                                }
+                            }
+                                                        SectionHeading { label: "Compra automática — Sniper"; }
                             HorizontalLayout {
                                 Text { text: "Conta"; color: #ebc9b5; vertical-alignment: center; }
                                 for account[i] in root.accounts : WoodButton {

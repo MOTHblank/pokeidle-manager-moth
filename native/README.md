@@ -40,8 +40,12 @@ comparison throughout the work.
   with explicit two-step confirmations for single-Pokémon and Depot sales.
   All sales delegate to the Manager game-confirmed Rust command dispatcher.
   Lists are virtualized so a large Depot does not instantiate offscreen rows.
-- **Mercado** route using the original market summary reader in a virtualized
-  table, plus native sniper rule creation (item, currency, per-unit cap,
+- **Mercado** includes live offer summaries, game-confirmed transaction
+  history, best-selling item rankings and a separate log of purchases
+  acknowledged by this Manager (including unsuccessful offers). Records
+  are clearly marked when game history is not yet confirmed, with
+  virtualized tables and local-calendar timestamps.
+  It also supports native sniper rule creation (item, currency, per-unit cap,
   budget, minimum balance), enable/pause and deletion, all delegated to
   the original Rust MarketRuntime and SQLite migrations in an isolated
   native data directory.

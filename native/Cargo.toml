@@ -32,6 +32,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 open = "5"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+chrono = "0.4"
 
 [profile.release]
 lto = "thin"
