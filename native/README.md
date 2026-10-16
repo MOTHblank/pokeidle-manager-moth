@@ -142,6 +142,11 @@ verified game-bonus end-to-end path remain necessary for final parity.
 
 ## UI and forecast workload
 
+The hunt reference and item artwork catalog are fetched on demand with
+single-flight guards. A temporary network failure does not permanently
+poison the session; each loader retries after a bounded 45-second
+backoff, without polling the server continuously.
+
 The interface refresh loop can run frequently, but costly inventory card
 models are only rebuilt when the account's domain revision, selected scope,
 filters, sorting or asynchronous artwork cache changes. Hunt forecasts are
