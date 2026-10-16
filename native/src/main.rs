@@ -528,6 +528,17 @@ impl NativeCore {
             }
             let capture = &s.state.capture_mode;
             let auto_buy = &s.state.auto_buy_rules;
+            ui.set_refill_rules(model(auto_buy.iter().map(|rule| RefillRuleRow {
+                kind: if matches!(&rule.kind, domain::AutoBuyKind::Item) {
+                    "Potion".into()
+                } else { "Ball".into() },
+                item_id: rule.item_id.to_string().into(),
+                minimum: rule.minimum.to_string().into(),
+                quantity: rule.quantity.to_string().into(),
+                status: if rule.enabled {
+                    rule.status.clone().unwrap_or_else(|| "Ativa".into()).into()
+                } else { "Desativada".into() },
+            }).collect()));
             let potion_buy = auto_buy.iter()
                 .any(|r| r.enabled && matches!(&r.kind, domain::AutoBuyKind::Item));
             let ball_buy = auto_buy.iter()
@@ -555,6 +566,7 @@ impl NativeCore {
         } else {
             *self.last_editor_account.lock() = None;
             ui.set_automations(model(Vec::new()));
+            ui.set_refill_rules(model(Vec::new()));
         }
 
         if ui.get_page() == 1 {
@@ -1111,6 +1123,32 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
             ui.set_automation_last_error(
                 result.err().unwrap_or_default().into()
             );
+        }
+    });
+    let weak = ui.as_weak();
+    let refill_core = core.clone();
+    ui.on_update_refill_rule(move || {
+        if let Some(ui) = weak.upgrade() {
+            let account = refill_core.account_id(ui.get_selected_account());
+            let result: Result<(), String> = (|| {
+                let id: u64 = ui.get_refill_item_id().trim().parse()
+                    .map_err(|_| "ID do item inválido".to_string())?;
+                if id == 0 { return Err("ID do item deve ser maior que zero".into()); }
+                let minimum: u64 = ui.get_refill_minimum().trim().parse()
+                    .map_err(|_| "Estoque mínimo inválido".to_string())?;
+                let quantity: u64 = ui.get_refill_quantity().trim().parse()
+                    .map_err(|_| "Quantidade de compra inválida".to_string())?;
+                let kind = if ui.get_refill_kind() == 0 {
+                    domain::AutoBuyKind::Item
+                } else { domain::AutoBuyKind::Ball };
+                refill_core.accounts.update_auto_buy_rule(
+                    &account, kind, id, minimum, quantity
+                ).map_err(|error| error.to_string())
+            })();
+            ui.set_automation_last_error(match result {
+                Ok(()) => "Regra salva; ative a compra automática para usá-la.".into(),
+                Err(error) => error.into(),
+            });
         }
     });
     let weak = ui.as_weak();

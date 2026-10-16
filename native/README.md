@@ -32,8 +32,10 @@ comparison throughout the work.
 - **Automações** route, account picker and the eight original operational
   controls (Potion, Revive, capture until caught, continuous capture,
   auto-sell, return to hunt, auto-buy Potion and Ball), with editable HP
-  threshold and configured Potion/Ball IDs. Each action calls the original
-  Rust account dispatcher. The interface also exposes Center/hunt navigation.
+  threshold and configured Potion/Ball IDs, plus editable per-item
+  restock minimums and purchase quantities. Saved refill rules are shown
+  by item, status and category; no rule is silently enabled by saving.
+  Each action calls the original Rust account dispatcher. The interface also exposes Center/hunt navigation.
 - **Inventários** route with item/ball/Pokémon tabs and search backed
   by account_inventory/account_depot, type and minimum-IV filtering,
   descending sort by level, quality, potency, IV and calculated score,
@@ -73,13 +75,17 @@ comparison throughout the work.
 
 ## Not yet complete
 
-This is **not a complete pixel-perfect or feature-complete React port**.
-Advanced Market history, rich item artwork and Inventory ownership aggregation,
-fully animated sprite
-sequences, advanced session/drop artwork and all auto-buy per-item thresholds,
-fine-grained original layouts/typography, Hunt Atlas forecasts, Twitch OAuth onboarding/bonus verification and installation/update flow still need implementation.
-This milestone brings back the original page structure and navigation
-rather than asserting visual or behavioral parity that hasn't been tested.
+The Slint port is **not yet visually pixel-identical or feature-complete**
+with the original React Manager. Outstanding work includes full animated
+Pokémon sprite sequences, rare-drop artwork, detailed original panel
+geometry and typography, a richer Pokémon rating panel, a complete
+developer protocol inspector, fully automatic native Twitch authorization
+and proof of server-side viewing bonus eligibility, and a tested native
+Windows installer/update channel. Hunt predictions remain forecasts
+rather than fully trace-validated measured combat rates.
+
+The original navigation structure and core native data/command flows are
+implemented; this statement is not a final-release or QA signoff.
 
 ## Build
 

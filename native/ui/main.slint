@@ -103,6 +103,13 @@ export struct LiveRow {
     viewers: string,
     platform: string,
 }
+export struct RefillRuleRow {
+    kind: string,
+    item-id: string,
+    minimum: string,
+    quantity: string,
+    status: string,
+}
 export struct AutomationRow {
     key: string,
     label: string,
@@ -421,6 +428,11 @@ export component ManagerWindow inherits Window {
     in-out property <string> potion-selection: "";
     in-out property <string> ball-selection: "";
     in-out property <string> automation-last-error: "";
+    in-out property <[RefillRuleRow]> refill-rules: [];
+    in-out property <int> refill-kind: 0;
+    in-out property <string> refill-item-id: "";
+    in-out property <string> refill-minimum: "500";
+    in-out property <string> refill-quantity: "1000";
     in-out property <string> total-xp: "0";
     in-out property <string> total-gold-rate: "0";
     in-out property <string> total-gold: "0";
@@ -477,6 +489,7 @@ export component ManagerWindow inherits Window {
     callback toggle-automation(string, bool);
     callback set-potion-threshold(int);
     callback save-combat-selection(string, string);
+    callback update-refill-rule;
     callback sell-pokemon(string);
     callback sell-all-pokemon;
     callback reset-session;
@@ -1009,6 +1022,84 @@ export component ManagerWindow inherits Window {
                             for automation in root.automations : ToggleRow {
                                 item: automation;
                                 toggled(key, value) => { root.toggle-automation(key, value); }
+                            }
+                            SectionHeading { label: "Reabastecimento por item"; }
+                            Rectangle {
+                                height: 143px;
+                                background: #422933;
+                                border-color: #965943;
+                                border-width: 2px;
+                                border-radius: 8px;
+                                VerticalLayout {
+                                    padding: 11px; spacing: 9px;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        WoodButton {
+                                            label: "Poções";
+                                            selected: root.refill-kind == 0;
+                                            clicked => { root.refill-kind = 0; }
+                                        }
+                                        WoodButton {
+                                            label: "Balls";
+                                            selected: root.refill-kind == 1;
+                                            clicked => { root.refill-kind = 1; }
+                                        }
+                                        Text { text: "ID do item"; color: #e9c5ad; vertical-alignment: center; }
+                                        LineEdit {
+                                            text <=> root.refill-item-id;
+                                            width: 100px;
+                                            placeholder-text: "ID";
+                                        }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 9px;
+                                        Text { text: "Comprar abaixo de"; color: #e9c5ad; vertical-alignment: center; }
+                                        LineEdit { text <=> root.refill-minimum; width: 100px; }
+                                        Text { text: "Quantidade por compra"; color: #e9c5ad; vertical-alignment: center; }
+                                        LineEdit { text <=> root.refill-quantity; width: 100px; }
+                                        WoodButton { label: "Salvar limite"; clicked => { root.update-refill-rule(); } }
+                                    }
+                                    Text {
+                                        text: "Os limites são por item e por conta; regras de compra desativadas não são ativadas automaticamente.";
+                                        color: #bfa7a1;
+                                        font-size: 12px;
+                                    }
+                                }
+                            }
+                            ListView {
+                                height: 220px;
+                                for entry in root.refill-rules : Rectangle {
+                                    height: 58px;
+                                    background: #3c2734;
+                                    border-color: #8a523f;
+                                    border-width: 1px;
+                                    HorizontalLayout {
+                                        padding: 8px;
+                                        spacing: 10px;
+                                        Text {
+                                            text: entry.kind + " #" + entry.item-id;
+                                            color: #ffe0bc;
+                                            font-weight: 720;
+                                        }
+                                        Text {
+                                            text: "Mín. " + entry.minimum +
+                                                "   •   Compra " + entry.quantity +
+                                                "   •   " + entry.status;
+                                            color: #caada2;
+                                            font-size: 12px;
+                                            vertical-alignment: center;
+                                        }
+                                        WoodButton {
+                                            label: "Editar";
+                                            clicked => {
+                                                root.refill-kind = entry.kind == "Potion" ? 0 : 1;
+                                                root.refill-item-id = entry.item-id;
+                                                root.refill-minimum = entry.minimum;
+                                                root.refill-quantity = entry.quantity;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 
