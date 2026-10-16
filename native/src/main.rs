@@ -1123,12 +1123,40 @@ impl NativeCore {
                         "Gold".into()
                     } else { "Gemas".into() },
                 }).collect()));
+            let item_query = ui.get_sniper_item_search().trim().to_lowercase();
+            let choices: Vec<_> = market.item_metadata.iter()
+                .filter(|meta| item_query.is_empty()
+                    || meta.name.to_lowercase().contains(&item_query)
+                    || meta.item_id.to_string().contains(&item_query))
+                .take(24)
+                .map(|meta| {
+                    let summary = market.summaries.iter()
+                        .find(|row| row.item_id == meta.item_id);
+                    MarketItemChoice {
+                        id: meta.item_id.to_string().into(),
+                        name: meta.name.clone().into(),
+                        prices: summary.map(|row| format!("Gold {} · Gemas {}",
+                            row.min_gold.map(format_num).unwrap_or_else(|| "—".into()),
+                            row.min_orb.map(format_num).unwrap_or_else(|| "—".into())))
+                            .unwrap_or_else(|| "Preço indisponível".into()).into(),
+                    }
+                }).collect();
+            ui.set_sniper_items(model(choices));
             ui.set_sniper_rules(model(market.rules.iter()
                 .filter(|rule| rule.account_id == id)
                 .map(|rule| SniperRuleRow {
                     id: rule.id.clone().into(),
-                    label: format!("Item #{}  •  {}", rule.item_id,
-                        if rule.currency == market::MarketCurrency::Gold { "Gold" } else { "Orbs" }).into(),
+                    label: format!("{}  •  {}",
+                        names.get(&rule.item_id).copied()
+                            .map(str::to_owned).unwrap_or_else(|| format!("Item #{}", rule.item_id)),
+                        if rule.currency == market::MarketCurrency::Gold { "Gold" } else { "Gemas" }).into(),
+                    current_price: market.summaries.iter().find(|summary| summary.item_id == rule.item_id)
+                        .and_then(|summary| if rule.currency == market::MarketCurrency::Gold {
+                            summary.min_gold
+                        } else { summary.min_orb })
+                        .map(format_num).unwrap_or_else(|| "Sem oferta".into()).into(),
+                    balance: if rule.budget == 0 { "Ilimitado".into() }
+                        else { format_num(rule.budget.saturating_sub(rule.spent)).into() },
                     price: format_num(rule.max_price).into(),
                     budget: if rule.budget == 0 { "Ilimitado".into() }
                         else { format_num(rule.budget).into() },
@@ -1703,26 +1731,83 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
                 if item_id == 0 || max_price == 0 {
                     return Err("Item e preço máximo devem ser maiores que zero".into());
                 }
+                let previous = if ui.get_sniper_editing_id().is_empty() {
+                    None
+                } else {
+                    Some(save_market.market.snapshot().rules.into_iter()
+                        .find(|rule| rule.id == ui.get_sniper_editing_id().as_str()
+                            && rule.account_id == id)
+                        .ok_or_else(|| "Regra editada não encontrada nesta conta".to_string())?)
+                };
+                let currency = if ui.get_sniper_currency() == 0 {
+                    market::MarketCurrency::Gold
+                } else { market::MarketCurrency::Orb };
+                let existing = save_market.market.snapshot().rules;
+                if existing.iter().any(|rule| rule.account_id == id
+                    && rule.id != previous.as_ref().map(|r| r.id.as_str()).unwrap_or("")
+                    && rule.item_id == item_id && rule.currency == currency
+                    && rule.target_type == "item") {
+                    return Err("Já existe uma regra para este item e moeda nesta conta".into());
+                }
+                if let Some(old) = &previous {
+                    if budget > 0 && budget < old.spent {
+                        return Err("O orçamento não pode ser menor que o valor já gasto".into());
+                    }
+                }
                 let rule = market::MarketSniperRule {
-                    id: uuid::Uuid::new_v4().to_string(),
+                    id: previous.as_ref().map(|rule| rule.id.clone())
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
                     account_id: id,
                     target_type: "item".into(),
                     item_id,
-                    enabled: true,
-                    currency: if ui.get_sniper_currency() == 0 {
-                        market::MarketCurrency::Gold
-                    } else { market::MarketCurrency::Orb },
+                    enabled: previous.as_ref().map(|rule| rule.enabled).unwrap_or(true),
+                    currency,
                     max_price,
                     budget,
                     minimum_balance,
-                    quantity: 0, spent: 0, purchased_quantity: 0,
+                    quantity: 0,
+                    spent: previous.as_ref().map(|rule| rule.spent).unwrap_or(0),
+                    purchased_quantity: previous.as_ref().map(|rule| rule.purchased_quantity)
+                        .unwrap_or(0),
                 };
                 save_market.market.save_rule(rule)
             })();
             ui.set_status_line(match result {
-                Ok(()) => "Regra salva no Mercado nativo".into(),
+                Ok(()) => {
+                    ui.set_sniper_editing_id("".into());
+                    ui.set_sniper_item_id("".into());
+                    ui.set_sniper_item_search("".into());
+                    ui.set_sniper_max_price("".into());
+                    ui.set_sniper_picker_open(false);
+                    "Compra automática salva".into()
+                }
                 Err(error) => error.into(),
             });
+        }
+    });
+    let weak = ui.as_weak();
+    let edit_market = core.clone();
+    ui.on_edit_sniper_rule(move |rule_id| {
+        if let Some(ui) = weak.upgrade() {
+            let snapshot = edit_market.market.snapshot();
+            if let Some(rule) = snapshot.rules.iter().find(|rule| rule.id == rule_id.as_str()) {
+                if let Some(slot) = edit_market.profiles.iter()
+                    .position(|profile| profile.id() == rule.account_id) {
+                    ui.set_selected_account(slot as i32);
+                    ui.selected_account_changed(slot as i32);
+                }
+                ui.set_sniper_editing_id(rule.id.clone().into());
+                ui.set_sniper_item_id(rule.item_id.to_string().into());
+                ui.set_sniper_item_search(snapshot.item_metadata.iter()
+                    .find(|entry| entry.item_id == rule.item_id)
+                    .map(|entry| entry.name.clone())
+                    .unwrap_or_else(|| format!("Item #{}", rule.item_id)).into());
+                ui.set_sniper_max_price(rule.max_price.to_string().into());
+                ui.set_sniper_currency(if rule.currency == market::MarketCurrency::Gold { 0 } else { 1 });
+                ui.set_sniper_budget(rule.budget.to_string().into());
+                ui.set_sniper_min_balance(rule.minimum_balance.to_string().into());
+                ui.set_sniper_picker_open(false);
+            }
         }
     });
     let weak = ui.as_weak();
