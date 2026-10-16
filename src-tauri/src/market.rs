@@ -469,7 +469,7 @@ impl MarketRuntime {
         }
         *self.task_status.lock() = "iniciando".into();
         let runtime = self.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             *runtime.task_status.lock() = "ativo".into();
             loop {
                 if runtime.cancellation.is_cancelled() {
@@ -479,7 +479,7 @@ impl MarketRuntime {
                 let mut signals = runtime.accounts.subscribe_market_signals();
                 let worker_runtime = runtime.clone();
                 let queue_depth = runtime.signal_queue_depth.clone();
-                let mut worker = tauri::async_runtime::spawn(async move {
+                let mut worker = tokio::spawn(async move {
                     worker_runtime.run(&mut signals, queue_depth).await;
                 });
                 let mut watchdog = tokio::time::interval(MARKET_READER_WATCHDOG_INTERVAL);
@@ -776,9 +776,9 @@ impl MarketRuntime {
 
     fn hydrate_global_history_async(&self) {
         let runtime = self.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let database = runtime.database.clone();
-            let loaded = tauri::async_runtime::spawn_blocking(move || {
+            let loaded = tokio::task::spawn_blocking(move || {
                 load_global_history(&database.lock(), now_ms())
             })
             .await;
@@ -807,9 +807,9 @@ impl MarketRuntime {
 
     fn hydrate_item_metadata_async(&self) {
         let runtime = self.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let database = runtime.database.clone();
-            let loaded = tauri::async_runtime::spawn_blocking(move || {
+            let loaded = tokio::task::spawn_blocking(move || {
                 load_market_item_metadata(&database.lock())
             })
             .await;
@@ -1463,7 +1463,7 @@ impl MarketRuntime {
         should_cleanup: bool,
     ) {
         let database = self.database.clone();
-        tauri::async_runtime::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             let database = database.lock();
             if let Err(error) =
                 persist_global_history(&database, &entries, observed_at, should_cleanup)
@@ -1640,7 +1640,7 @@ impl MarketRuntime {
 
     fn persist_item_metadata_async(&self, metadata: MarketItemMetadata) {
         let database = self.database.clone();
-        tauri::async_runtime::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             if let Err(error) = persist_market_item_metadata(&database.lock(), &metadata) {
                 tracing::warn!(%error, item_id = metadata.item_id, "market item metadata persistence failed");
             }

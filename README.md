@@ -1,5 +1,7 @@
 # Pokeidle Manager
 
+> **Native Rust migration (experimental):** A Tauri/WebView2-free egui target is now available in [native/](native/README.md). It reuses Moth Firefox profiles and the existing Manager game engine. It is not feature-complete; the original desktop app remains available.
+
 O Pokeidle Manager é um aplicativo complementar não oficial para desktop, feito para organizar várias contas do Pokeidle e consultar informações de conta, hunts, inventário, automações e mercado. O projeto não é afiliado, endossado nem operado pelo jogo Pokeidle ou pelos detentores de seus direitos.
 
 Este repositório é o código-fonte oficial da edição comunitária do Pokeidle Manager.
