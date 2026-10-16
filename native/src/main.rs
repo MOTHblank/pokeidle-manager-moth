@@ -1014,9 +1014,8 @@ impl NativeCore {
                         "Comprador não identificado".into()
                     } else { entry.buyer.clone().into() },
                     date: format_event_time(entry.occurred_at).into(),
-                    unit_price: entry.quantity.filter(|q| *q > 0 && entry.total % *q == 0)
-                        .map(|q| format_num(entry.total / q))
-                        .unwrap_or_else(|| "—".into()).into(),
+                    unit_price: exact_unit_price(entry.total, entry.quantity)
+                        .map(format_num).unwrap_or_else(|| "—".into()).into(),
                     total: format_num(entry.total).into(),
                     currency: if entry.currency == market::MarketCurrency::Gold {
                         "Gold".into()
@@ -1076,16 +1075,14 @@ impl NativeCore {
             let market_query = ui.get_market_search().trim().to_lowercase();
             let market_rows: Vec<_> = market.summaries.iter()
                 .filter(|row| {
-                    let named = names.get(&row.item_id).copied().unwrap_or("");
-                    let matches_search = market_query.is_empty()
-                        || named.to_lowercase().contains(&market_query)
-                        || row.item_id.to_string().contains(&market_query);
-                    let matches_currency = match market_currency {
-                        1 => row.min_gold.is_some(),
-                        2 => row.min_orb.is_some(),
-                        _ => true,
-                    };
-                    matches_search && matches_currency
+                    market_offer_matches(
+                        names.get(&row.item_id).copied().unwrap_or(""),
+                        row.item_id,
+                        row.min_gold,
+                        row.min_orb,
+                        &market_query,
+                        market_currency,
+                    )
                 })
                 .map(|row| MarketRow {
                     name: names.get(&row.item_id)
@@ -1174,6 +1171,34 @@ impl NativeCore {
             ui.set_kick_lives(model(kick));
         }
     }
+}
+
+// Pure display filters. Searching does not alter market readers, subscriptions,
+// sniper rules, or any upstream game-visible state.
+fn market_offer_matches(
+    name: &str,
+    item_id: u64,
+    min_gold: Option<u64>,
+    min_orb: Option<u64>,
+    query: &str,
+    currency: i32,
+) -> bool {
+    let needle = query.trim().to_lowercase();
+    let matches_search = needle.is_empty()
+        || name.to_lowercase().contains(&needle)
+        || item_id.to_string().contains(&needle);
+    let matches_currency = match currency {
+        1 => min_gold.is_some(),
+        2 => min_orb.is_some(),
+        _ => true,
+    };
+    matches_search && matches_currency
+}
+
+// Do not label a fractional or unknown amount as an exact unit price.
+fn exact_unit_price(total: u64, quantity: Option<u64>) -> Option<u64> {
+    quantity.filter(|q| *q > 0 && total % *q == 0)
+        .map(|q| total / q)
 }
 
 fn parse_sale_target(input: &str) -> Option<(String, u64)> {
@@ -1716,5 +1741,29 @@ mod native_inventory_tests {
         for input in ["123", "Game5:123", "Game1:0", "Game1:not-a-number", "Game1:123:456", "Game1:-1"] {
             assert_eq!(parse_sale_target(input), None);
         }
+    }
+}
+
+#[cfg(test)]
+mod native_market_ui_tests {
+    use super::{exact_unit_price, market_offer_matches};
+
+    #[test]
+    fn offers_are_filtered_by_text_id_and_currency_without_changing_snapshot() {
+        assert!(market_offer_matches("Heart Stone", 70032, Some(20), None, "heart", 0));
+        assert!(market_offer_matches("Heart Stone", 70032, Some(20), None, "70032", 1));
+        assert!(market_offer_matches("Heart Stone", 70032, Some(20), None, "  HEART  ", 1));
+        assert!(!market_offer_matches("Heart Stone", 70032, Some(20), None, "", 2));
+        assert!(!market_offer_matches("Heart Stone", 70032, Some(20), None, "potion", 0));
+        assert!(market_offer_matches("Orb item", 50, None, Some(0), "", 2));
+        assert!(market_offer_matches("No quotes", 51, None, None, "", 0));
+    }
+
+    #[test]
+    fn recent_sales_never_invent_inexact_unit_prices() {
+        assert_eq!(exact_unit_price(1_200, Some(3)), Some(400));
+        assert_eq!(exact_unit_price(1_200, Some(0)), None);
+        assert_eq!(exact_unit_price(1_200, None), None);
+        assert_eq!(exact_unit_price(1_201, Some(3)), None);
     }
 }
