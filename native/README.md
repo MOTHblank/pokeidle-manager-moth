@@ -1,55 +1,71 @@
-# Experimental native desktop application
+# Native desktop — React interface migration
 
-A **WebView2-free** egui desktop executable. This is the first migration
-milestone, not a replacement for all functionality of the upstream Manager.
+The native application now uses **Slint**, not egui. The previous egui
+dashboard was discarded: it neither looked nor navigated like the
+original Manager.
+
+## Intent
+
+The original React desktop shell is the visual and interaction reference,
+not the simplified native prototype. Slint compiles to native rendering
+instead of embedding React in Chromium/WebView2. Therefore the React JSX
+and CSS cannot simply be executed unchanged: every view and interaction
+must be ported. The original React application remains available for
+comparison throughout the work.
+
+## Implemented in this milestone
+
+- The original **eight-route sidebar** in its original order, with the
+  original 232px illustrated sidebar, navigation PNGs, brand, wallpaper,
+  titleboards and scenic backgrounds reused from src/assets.
+- Native themed dashboard metric cards and four account cards with
+  clickable **Detalhes** navigation, back navigation and session toggle.
+- **Onde Caçar** with per-account picker, searchable real hunt catalogue
+  and game-confirmed, combat-lock-aware native **Ir para hunt** action.
+- **Automações** route, account picker, selected native automation
+  toggles, Centro Pokémon and Where-to-hunt navigation.
+- **Inventários** route with item/ball/Pokémon tabs and search backed
+  by account_inventory/account_depot.
+- **Mercado** route using the original market summary reader and original
+  SQLite migrations in an isolated native data directory.
+- **Lives** reading the game's live Twitch/Kick directory, with a
+  deliberate OS-level open-channel action (does not embed a browser).
+- **Configurações**, **Comunidade**, and per-account details navigation.
+- Existing Firefox Game1–Game4 login via ephemeral BiDi observer,
+  followed by native websocket handshake and server-confirmed handoff.
+  No installed userscripts are required.
+
+## Not yet complete
+
+This is **not a complete pixel-perfect or feature-complete React port**.
+The original advanced Market and Inventory workflows, animated Pokémon
+sprites, real Dashboard hunt-session statistics, all automation settings,
+fine-grained original layouts/typography, Hunt Atlas forecasts, native
+Twitch IRC and installation/update flow still need implementation.
+This milestone brings back the original page structure and navigation
+rather than asserting visual or behavioral parity that hasn't been tested.
 
 ## Build
 
-Install stable Rust and your platform's native build prerequisites, then run
-the command: cd native && cargo run --release
+Install Rust stable and Windows Desktop development prerequisites.
 
-Unlike the old React/Tauri desktop app, this executable links no Tauri or
-WebView2. It **compiles the original Manager's Rust engine modules directly**
-from src-tauri/src, including account state, native WebSocket, market internals,
-protocol parser, metrics, combat-lock-aware hunt command queue and connection
-handoff. The Market task spawns now use plain Tokio so both targets can compile.
+    cd native
+    cargo run --release
 
-## Firefox account setup
+The Slint UI is in ui/main.slint and the backing callbacks/models are in
+src/main.rs. The original Rust game engine is compiled *by path* from
+src-tauri/src; no redundant game-protocol implementation is introduced.
+Cargo.lock for this experimental crate is generated on the first build.
 
-This app reuses the persistent profiles managed by Moth Controller:
+The experimental executable uses a separate SQLite file at
+%LOCALAPPDATA%/Moth/PokeIdle/NativeManager/manager.sqlite, avoiding
+concurrent writes to the old Tauri installation. It does **not** edit,
+reset or copy Moth Controller Firefox profiles.
 
-| Slot | Profile under %LOCALAPPDATA%\Moth\PokeIdle\Profiles | BiDi port |
-| --- | --- | --- |
-| 1 | Game1 | 27701 |
-| 2 | Game2 | 27702 |
-| 3 | Game3 | 27703 |
-| 4 | Game4 | 27704 |
+## Verification required
 
-You can set MOTH_FIREFOX to Firefox's executable if auto-detection fails.
-Missing profiles are **not** silently recreated or rewritten.
-
-Use Connect to open Firefox briefly for a manual or saved login. The native
-program creates one Firefox BiDi session, installs a temporary page observer
-*before* the game loads, and captures the application's authenticated hello
-in memory. It then connects through Manager's own Rust WebSocket transport.
-Firefox is closed **only after a real game welcome and state-owner handoff**.
-Credentials and headers are not written to disk or included in logs.
-
-Do not use Moth Controller's BiDi monitor on the same profile concurrently:
-Firefox allows one BiDi session. This native program refuses a bound debug
-port rather than stealing another program's observer.
-
-BiDi's ability to capture all needed WebSocket session headers requires
-on-machine verification; authentication can fail even when the browser itself
-logs in. The app must not claim a native session is online in that case.
-
-## Current scope
-
-Available: native four-profile dashboard; manual Firefox-to-Rust authentication
-handoff; original native account state/metrics; searchable live hunt catalogue;
-a Go to hunt command preserving original game combat locks and confirmation.
-
-Not yet ported: Hunt Atlas's combat/ranking model, Twitch IRC bonus, native
-inventory/market/automation panels, durable native settings, complete original
-art/layout fidelity, installer, and automatic OAuth renewal. Do not uninstall
-the original Manager based on this experimental milestone.
+A Windows Rust compiler is unavailable in this execution environment,
+so successful Slint compilation, pixel comparison and BiDi authentication
+have not been independently verified. The source is being committed as
+an incremental, reviewable port, not represented as a tested production
+replacement.
