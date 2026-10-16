@@ -611,78 +611,109 @@ impl NativeCore {
             self.start_item_catalog();
             let tab = ui.get_inventory_tab();
             let search = ui.get_inventory_search().trim().to_lowercase();
-            let mut result = Vec::new();
+            let all_accounts = ui.get_inventory_all_accounts();
+            let active_profiles: Vec<_> = self.profiles.iter().enumerate()
+                .filter(|(slot,_)| all_accounts || *slot == index)
+                .map(|(_,profile)| profile).collect();
+            let mut rows = Vec::new();
             if tab == 2 {
-                if let Ok(read) = self.accounts.account_depot(&id, None) {
-                    let min_iv: u64 = ui.get_pokemon_min_iv().trim().parse().unwrap_or(0);
-                    let poke_type = ui.get_pokemon_type_filter().trim().to_ascii_lowercase();
-                    let mut pokemon = read.data.unwrap_or_default();
-                    pokemon.retain(|entry| {
-                        (search.is_empty() || entry.name.to_lowercase().contains(&search) ||
-                            entry.id.contains(&search)) &&
-                        (poke_type.is_empty() || entry.types.iter()
-                            .any(|item| item.to_lowercase().contains(&poke_type))) &&
-                        entry.iv_total.unwrap_or_default() >= min_iv
-                    });
-                    match ui.get_pokemon_sort() {
-                        1 => pokemon.sort_by(|a,b| b.quality.unwrap_or_default()
-                            .total_cmp(&a.quality.unwrap_or_default())),
-                        2 => pokemon.sort_by(|a,b| b.power.unwrap_or_default()
-                            .cmp(&a.power.unwrap_or_default())),
-                        3 => pokemon.sort_by(|a,b| b.iv_total.unwrap_or_default()
-                            .cmp(&a.iv_total.unwrap_or_default())),
-                        4 => pokemon.sort_by(|a,b| b.note.unwrap_or_default()
-                            .total_cmp(&a.note.unwrap_or_default())),
-                        5 => pokemon.sort_by(|a,b| b.id.cmp(&a.id)),
-                        _ => pokemon.sort_by(|a,b| b.level.cmp(&a.level)),
-                    }
-                    for p in pokemon {
-                        let subtitle = format!(
-                            "{}  •  P{}  •  IV {}  •  Q {:.3}  •  Nota {:.3}",
-                            p.types.join(" / "), p.power.unwrap_or_default(),
-                            p.iv_total.unwrap_or_default(),
-                            p.quality.unwrap_or_default(),
-                            p.note.unwrap_or_default()
-                        );
-                        let label = format!("{}{}  •  Lv. {}",
-                            if p.shiny { "✨ " } else { "" }, p.name, p.level);
-                        let (artwork, has_artwork) =
-                            self.sprite(p.look_shiny.or(p.looktype));
-                        result.push(InventoryRow {
-                            artwork, has_artwork,
-                            id: p.id.into(),
-                            owner: self.profiles[index].label().into(),
-                            title: label.into(),
-                            quantity: "".into(),
-                            category: "Pokémon".into(),
-                            details: subtitle.into(),
-                            is_pokemon: true,
-                            locked: p.locked,
-                        });
+                let min_iv: u64 = ui.get_pokemon_min_iv().trim().parse().unwrap_or(0);
+                let poke_type = ui.get_pokemon_type_filter().trim().to_lowercase();
+                let mut depot = Vec::new();
+                for profile in &active_profiles {
+                    if let Ok(read) = self.accounts.account_depot(&profile.id(), None) {
+                        depot.extend(read.data.unwrap_or_default().into_iter()
+                            .map(|pokemon| (profile.id(), profile.label(), pokemon)));
                     }
                 }
-            } else if let Ok(read) = self.accounts.account_inventory(&id, None) {
-                for item in read.data.unwrap_or_default() {
-                    if tab == 1 && item.category != "balls" { continue; }
-                    if tab == 0 && item.category == "balls" { continue; }
-                    if !search.is_empty() && !item.name.to_lowercase().contains(&search)
-                        && !item.id.to_lowercase().contains(&search) { continue; }
-                    let (artwork, has_artwork) = self.item_artwork(&item.id, &item.asset_key);
-                    result.push(InventoryRow {
+                depot.retain(|(_,_,entry)| {
+                    (search.is_empty() || entry.name.to_lowercase().contains(&search) ||
+                        entry.id.contains(&search)) &&
+                    (poke_type.is_empty() || entry.types.iter()
+                        .any(|kind| kind.to_lowercase().contains(&poke_type))) &&
+                    entry.iv_total.unwrap_or_default() >= min_iv
+                });
+                match ui.get_pokemon_sort() {
+                    1 => depot.sort_by(|a,b| b.2.quality.unwrap_or_default()
+                        .total_cmp(&a.2.quality.unwrap_or_default())),
+                    2 => depot.sort_by(|a,b| b.2.power.unwrap_or_default()
+                        .cmp(&a.2.power.unwrap_or_default())),
+                    3 => depot.sort_by(|a,b| b.2.iv_total.unwrap_or_default()
+                        .cmp(&a.2.iv_total.unwrap_or_default())),
+                    4 => depot.sort_by(|a,b| b.2.note.unwrap_or_default()
+                        .total_cmp(&a.2.note.unwrap_or_default())),
+                    5 => depot.sort_by(|a,b| b.2.id.cmp(&a.2.id)),
+                    _ => depot.sort_by(|a,b| b.2.level.cmp(&a.2.level)),
+                }
+                for (account_id, owner, pokemon) in depot {
+                    let details = format!(
+                        "{}  •  P{}  •  IV {}  •  Q {:.3}  •  Nota {:.3}",
+                        pokemon.types.join(" / "), pokemon.power.unwrap_or_default(),
+                        pokemon.iv_total.unwrap_or_default(),
+                        pokemon.quality.unwrap_or_default(),
+                        pokemon.note.unwrap_or_default()
+                    );
+                    let title = format!("{}{}  •  Lv. {}",
+                        if pokemon.shiny { "✨ " } else { "" },
+                        pokemon.name, pokemon.level);
+                    let (artwork, has_artwork) =
+                        self.sprite(pokemon.look_shiny.or(pokemon.looktype));
+                    rows.push(InventoryRow {
+                        id: format!("{}:{}", account_id, pokemon.id).into(),
+                        owner: owner.into(),
+                        title: title.into(),
+                        quantity: "".into(),
+                        category: "Pokémon".into(),
+                        details: details.into(),
                         artwork, has_artwork,
-                        id: item.id.into(),
-                        owner: self.profiles[index].id().into(),
-                        title: item.name.into(),
-                        quantity: format_num(item.quantity).into(),
-                        category: item.category.into(),
-                        details: "".into(),
+                        is_pokemon: true,
+                        locked: pokemon.locked,
+                    });
+                }
+            } else {
+                // An item is keyed by its game ID, not by its translated name.
+                // Aggregate quantities only after collecting per-account rows;
+                // never create duplicate entries for the same object.
+                let mut inventory = std::collections::BTreeMap::<String,
+                    (String, String, String, u64, Vec<String>)>::new();
+                for profile in &active_profiles {
+                    if let Ok(read) = self.accounts.account_inventory(&profile.id(), None) {
+                        for item in read.data.unwrap_or_default() {
+                            if tab == 1 && item.category != "balls" { continue; }
+                            if tab == 0 && item.category == "balls" { continue; }
+                            let group = inventory.entry(item.id.clone()).or_insert_with(||
+                                (item.asset_key.clone(), item.name.clone(),
+                                 item.category.clone(), 0, Vec::new()));
+                            group.3 = group.3.saturating_add(item.quantity);
+                            if !group.4.contains(&profile.label()) {
+                                group.4.push(profile.label());
+                            }
+                        }
+                    }
+                }
+                for (item_id, (asset_key, name, category, quantity, owners)) in inventory {
+                    if !search.is_empty() && !name.to_lowercase().contains(&search)
+                        && !item_id.to_lowercase().contains(&search) { continue; }
+                    let (artwork, has_artwork) = self.item_artwork(&item_id, &asset_key);
+                    let owner_label = owners.join(", ");
+                    let details = if all_accounts {
+                        format!("{}  •  {}", category, owner_label)
+                    } else { String::new() };
+                    rows.push(InventoryRow {
+                        id: item_id.into(),
+                        owner: owner_label.into(),
+                        title: name.into(),
+                        quantity: format_num(quantity).into(),
+                        category: category.into(),
+                        details: details.into(),
+                        artwork, has_artwork,
                         is_pokemon: false,
                         locked: false,
                     });
                 }
-                result.sort_by(|a,b| a.title.cmp(&b.title));
+                rows.sort_by(|a,b| a.title.cmp(&b.title));
             }
-            ui.set_inventory(model(result));
+            ui.set_inventory(model(rows));
         }
         if ui.get_page() == 4 {
             let market = self.market.snapshot();
@@ -784,6 +815,15 @@ impl NativeCore {
             ui.set_lives(model(twitch.chain(kick).collect()));
         }
     }
+}
+
+fn parse_sale_target(input: &str) -> Option<(String, u64)> {
+    let (account, id) = input.split_once(':')?;
+    if !["Game1", "Game2", "Game3", "Game4"].contains(&account) {
+        return None;
+    }
+    let number = id.parse::<u64>().ok().filter(|v| *v > 0)?;
+    Some((account.into(), number))
 }
 
 fn format_event_time(unix: u64) -> String {
@@ -929,13 +969,12 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     let sale_core = core.clone();
     ui.on_sell_pokemon(move |pokemon_id| {
         if let Some(ui) = weak.upgrade() {
-            let id = sale_core.account_id(ui.get_selected_account());
-            let result = pokemon_id.as_str().parse::<u64>()
-                .map_err(|_| "ID de Pokémon inválido".to_string())
-                .and_then(|pokemon_id| sale_core.accounts.sell_pokemon(&id, pokemon_id)
+            let result = parse_sale_target(pokemon_id.as_str())
+                .ok_or_else(|| "Referência de venda inválida".to_string())
+                .and_then(|(id, number)| sale_core.accounts.sell_pokemon(&id, number)
                     .map_err(|error| error.to_string()));
             ui.set_status_line(match result {
-                Ok(()) => "Venda enviada. Aguardando confirmação do jogo.".into(),
+                Ok(()) => "Venda enviada à conta correta. Aguardando confirmação do jogo.".into(),
                 Err(error) => error.into(),
             });
         }
@@ -944,11 +983,24 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     let sell_all_core = core.clone();
     ui.on_sell_all_pokemon(move || {
         if let Some(ui) = weak.upgrade() {
-            let id = sell_all_core.account_id(ui.get_selected_account());
-            ui.set_status_line(match sell_all_core.accounts.sell_all_pokemon(&id) {
-                Ok(()) => "Venda do Depot enviada. Aguardando confirmação.".into(),
-                Err(error) => error.to_string().into(),
-            });
+            let targets: Vec<_> = sell_all_core.profiles.iter().enumerate()
+                .filter(|(i,_)| ui.get_inventory_all_accounts()
+                    || *i == ui.get_selected_account().max(0) as usize)
+                .map(|(_,profile)| profile.id()).collect();
+            let mut succeeded = 0;
+            let mut failures = Vec::new();
+            for id in targets {
+                match sell_all_core.accounts.sell_all_pokemon(&id) {
+                    Ok(()) => succeeded += 1,
+                    Err(error) => failures.push(format!("{id}: {error}")),
+                }
+            }
+            let status = if failures.is_empty() {
+                format!("Venda do Depot enviada para {succeeded} conta(s). Aguardando confirmação.")
+            } else {
+                format!("{succeeded} pedido(s) enviados. Falhas: {}", failures.join("; "))
+            };
+            ui.set_status_line(status.into());
         }
     });
     let weak = ui.as_weak();
@@ -1167,4 +1219,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.run()?;
     stop_irc.stop_all();
     Ok(())
+}
+
+#[cfg(test)]
+mod native_inventory_tests {
+    use super::parse_sale_target;
+    #[test]
+    fn sale_target_carries_an_explicit_profile_not_current_selection() {
+        assert_eq!(parse_sale_target("Game2:123"), Some(("Game2".into(), 123)));
+        assert_eq!(parse_sale_target("Game4:999"), Some(("Game4".into(), 999)));
+        for input in ["123", "Game5:123", "Game1:0", "Game1:not-a-number", "Game1:123:456", "Game1:-1"] {
+            assert_eq!(parse_sale_target(input), None);
+        }
+    }
 }

@@ -39,7 +39,10 @@ comparison throughout the work.
   descending sort by level, quality, potency, IV and calculated score,
   with explicit two-step confirmations for single-Pokémon and Depot sales.
   All sales delegate to the Manager game-confirmed Rust command dispatcher.
-  Lists are virtualized so a large Depot does not instantiate offscreen rows.
+  Inventory can show all four accounts together, aggregating identical item IDs
+  and keeping per-Pokémon ownership explicit. Cross-account Pokémon sales carry
+  the source profile with the Pokémon ID; Depot-wide sales require confirmation
+  and report failures per account. Lists are virtualized.
   Real Pokémon sprites and item icon images are fetched through the original
   Manager asset catalogue and decoded off the GUI thread. Missing images
   retain low-cost placeholder artwork instead of freezing the interface.
