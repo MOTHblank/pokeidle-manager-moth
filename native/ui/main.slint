@@ -1,4 +1,4 @@
-import { ScrollView, LineEdit } from "std-widgets.slint";
+import { ScrollView, LineEdit, ListView } from "std-widgets.slint";
 
 export struct AccountRow {
     id: string,
@@ -21,6 +21,13 @@ export struct AccountRow {
     mode: string,
     pending: string,
     vip: string,
+    session-kills: string,
+    session-captures: string,
+    session-xp: string,
+    session-pokemon-xp: string,
+    session-gold: string,
+    session-elapsed: string,
+    session-shinies: string,
 }
 export struct HuntRow {
     slug: string,
@@ -181,6 +188,7 @@ component SectionHeading inherits Text {
 }
 component AccountCard inherits Rectangle {
     in property <AccountRow> item;
+    in property <bool> session-mode: false;
     callback details;
     callback connect;
     height: 254px;
@@ -213,7 +221,19 @@ component AccountCard inherits Rectangle {
             Text { text: root.item.vip; color: #ffce76; font-weight: 700; horizontal-alignment: right; }
         }
         Rectangle { height: 2px; background: #9d6750; }
-        HorizontalLayout {
+        if root.session-mode : VerticalLayout {
+            spacing: 7px;
+            Text { text: "Sessão de caça  •  " + root.item.session-elapsed; color: #ffe5bb; font-weight: 700; font-size: 14px; }
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "Kills  " + root.item.session-kills; color: #f0d9b6; }
+                Text { text: "Capturas  " + root.item.session-captures; color: #f0d9b6; }
+                Text { text: "Shinies  " + root.item.session-shinies; color: #f0d9b6; }
+            }
+            Text { text: "XP Treinador  " + root.item.session-xp + "     XP Pokémon  " + root.item.session-pokemon-xp; color: #beeac0; font-weight: 650; }
+            Text { text: "Gold da sessão  " + root.item.session-gold; color: #ffca75; font-weight: 650; }
+        }
+        if !root.session-mode : HorizontalLayout {
             spacing: 12px;
             Rectangle {
                 width: 115px;
@@ -506,6 +526,7 @@ export component ManagerWindow inherits Window {
                                 flex-wrap: wrap;
                                 for account[i] in root.accounts : AccountCard {
                                     item: account;
+                                    session-mode: root.session-mode;
                                     details => { root.selected-account = i; root.selected-account-changed(i); root.showing-detail = true; }
                                     connect => { root.connect-account(i); }
                                 }
@@ -617,10 +638,13 @@ export component ManagerWindow inherits Window {
                                 Text { text: "Buscar"; vertical-alignment: center; color: #e0bba9; }
                                 LineEdit { text <=> root.inventory-search; placeholder-text: "Nome ou ID"; horizontal-stretch: 1; }
                             }
-                            for entry in root.inventory : DisplayRow {
-                                heading: entry.title;
-                                subheading: entry.category;
-                                value: entry.quantity;
+                            ListView {
+                                height: 445px;
+                                for entry in root.inventory : DisplayRow {
+                                    heading: entry.title;
+                                    subheading: entry.category;
+                                    value: entry.quantity;
+                                }
                             }
                         }
 
@@ -642,15 +666,18 @@ export component ManagerWindow inherits Window {
                                     Text { text: "Orbs"; color: #ffe8cc; font-weight: 700; }
                                 }
                             }
-                            for entry in root.market : Rectangle {
-                                height: 49px; background: #392733; border-width: 1px; border-color: #6f4c41;
-                                HorizontalLayout {
-                                    padding: 10px;
-                                    Text { text: entry.name; color: #ffebcb; }
-                                    Text { text: entry.listings; color: #d0b0a3; }
-                                    Text { text: entry.quantity; color: #d0b0a3; }
-                                    Text { text: entry.gold; color: #ffcd77; }
-                                    Text { text: entry.orbs; color: #d7b8ea; }
+                            ListView {
+                                height: 490px;
+                                for entry in root.market : Rectangle {
+                                    height: 49px; background: #392733; border-width: 1px; border-color: #6f4c41;
+                                    HorizontalLayout {
+                                        padding: 10px;
+                                        Text { text: entry.name; color: #ffebcb; }
+                                        Text { text: entry.listings; color: #d0b0a3; }
+                                        Text { text: entry.quantity; color: #d0b0a3; }
+                                        Text { text: entry.gold; color: #ffcd77; }
+                                        Text { text: entry.orbs; color: #d7b8ea; }
+                                    }
                                 }
                             }
                         }

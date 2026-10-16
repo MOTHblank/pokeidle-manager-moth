@@ -22,7 +22,9 @@ comparison throughout the work.
   original Manager's game asset service and displayed in native account cards
   and details, with no blocking network I/O on the UI thread.
 - Native themed dashboard metric cards and four account cards with
-  clickable **Detalhes** navigation, back navigation and session toggle.
+  clickable **Detalhes** navigation, back navigation and a genuine session
+  toggle for trainer XP/Pokémon XP, gold, captures, kills, shinies and elapsed
+  hunt time (not merely a label toggle).
 - **Onde Caçar** with per-account picker, searchable real hunt catalogue,
   native sustained-rotation estimates inspired by Hunt Atlas, trainer/Pokémon
   XP shown separately and explicit model-vs-measurement labeling, three-way
@@ -30,8 +32,9 @@ comparison throughout the work.
 - **Automações** route, account picker, selected native automation
   toggles, Centro Pokémon and Where-to-hunt navigation.
 - **Inventários** route with item/ball/Pokémon tabs and search backed
-  by account_inventory/account_depot.
-- **Mercado** route using the original market summary reader and original
+  by account_inventory/account_depot, with virtualized scrolling so a large
+  depot or bag does not instantiate hundreds of offscreen rows.
+- **Mercado** route using the original market summary reader in a virtualized table and original
   SQLite migrations in an isolated native data directory.
 - **Lives** reading the game's Twitch/Kick directory and a lightweight
   native Twitch IRC client capable of reconciling JOIN/PART membership

@@ -30,7 +30,7 @@ use twitch_irc::TwitchIrc;
 use market::MarketRuntime;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel};
-use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc}, time::Duration};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc}, time::{Duration, SystemTime, UNIX_EPOCH}};
 use tokio::runtime::{Builder, Runtime};
 
 pub(crate) const fn recovery_validation_mode_active() -> bool { false }
@@ -231,6 +231,7 @@ impl NativeCore {
                 total_gems = total_gems.saturating_add(s.state.orbs.unwrap_or_default());
             }
             let pokemon = snapshot.and_then(|s| s.state.active_pokemon.as_ref());
+            let session = snapshot.and_then(|s| s.state.hunt_session.as_ref());
             let hp = pokemon.map(|p| {
                 if p.max_hp == 0 { "—".to_string() }
                 else { format!("{}%", p.hp.saturating_mul(100)/p.max_hp) }
@@ -265,6 +266,18 @@ impl NativeCore {
                 vip: if snapshot.is_some_and(|s| s.state.vip_active.unwrap_or(false)) {
                     "VIP".into()
                 } else { "".into() },
+                session_kills: format_num(session.map(|s| s.kills).unwrap_or(0)).into(),
+                session_captures: format_num(session.map(|s| s.captures).unwrap_or(0)).into(),
+                session_xp: format_num(session.map(|s| s.trainer_xp).unwrap_or(0)).into(),
+                session_pokemon_xp: format_num(session.map(|s| s.pokemon_xp).unwrap_or(0)).into(),
+                session_gold: format_num(session.map(|s| s.gold_combat.saturating_add(s.gold_auto_sale)).unwrap_or(0)).into(),
+                session_shinies: format_num(session.map(|s| s.shinies_seen).unwrap_or(0)).into(),
+                session_elapsed: session.map(|s| {
+                    let now = SystemTime::now().duration_since(UNIX_EPOCH)
+                        .unwrap_or_default().as_millis() as u64;
+                    let seconds = now.saturating_sub(s.started_at_ms) / 1_000;
+                    format!("{:02}h {:02}m {:02}s", seconds / 3600, (seconds / 60) % 60, seconds % 60)
+                }).unwrap_or_else(|| "—".into()).into(),
             });
         }
         ui.set_accounts(model(rows));
@@ -379,7 +392,6 @@ impl NativeCore {
                     .map(|m| m.confidence).unwrap_or("Sem modelo").into(),
                 slug: h.slug.into(),
             }).collect();
-            rows.truncate(200);
             ui.set_hunts(model(rows));
         }
         if ui.get_page() == 3 {
@@ -409,7 +421,6 @@ impl NativeCore {
                     });
                 }
             }
-            result.truncate(500);
             ui.set_inventory(model(result));
         }
         if ui.get_page() == 4 {
@@ -417,7 +428,7 @@ impl NativeCore {
             let names: std::collections::HashMap<_,_> = market.item_metadata.iter()
                 .map(|m| (m.item_id, m.name.as_str())).collect();
             ui.set_market_status(market.reader_status.into());
-            ui.set_market(model(market.summaries.iter().take(150).map(|row| MarketRow {
+            ui.set_market(model(market.summaries.iter().map(|row| MarketRow {
                 name: names.get(&row.item_id)
                     .map(|s| (*s).to_string())
                     .unwrap_or_else(|| format!("Item #{}", row.item_id)).into(),
