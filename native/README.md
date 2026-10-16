@@ -29,8 +29,11 @@ comparison throughout the work.
   native sustained-rotation estimates inspired by Hunt Atlas, trainer/Pokémon
   XP shown separately and explicit model-vs-measurement labeling, three-way
   XP/Gold ranking, and the existing combat-lock-aware **Ir para hunt** action.
-- **Automações** route, account picker, selected native automation
-  toggles, Centro Pokémon and Where-to-hunt navigation.
+- **Automações** route, account picker and the eight original operational
+  controls (Potion, Revive, capture until caught, continuous capture,
+  auto-sell, return to hunt, auto-buy Potion and Ball), with editable HP
+  threshold and configured Potion/Ball IDs. Each action calls the original
+  Rust account dispatcher. The interface also exposes Center/hunt navigation.
 - **Inventários** route with item/ball/Pokémon tabs and search backed
   by account_inventory/account_depot, type and minimum-IV filtering,
   descending sort by level, quality, potency, IV and calculated score,
@@ -61,7 +64,7 @@ comparison throughout the work.
 This is **not a complete pixel-perfect or feature-complete React port**.
 Advanced Market history, rich item artwork and Inventory ownership aggregation,
 fully animated sprite
-sequences, advanced session/drop artwork and all automation settings,
+sequences, advanced session/drop artwork and all auto-buy per-item thresholds,
 fine-grained original layouts/typography, Hunt Atlas forecasts, Twitch OAuth onboarding/bonus verification and installation/update flow still need implementation.
 This milestone brings back the original page structure and navigation
 rather than asserting visual or behavioral parity that hasn't been tested.

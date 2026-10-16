@@ -384,6 +384,10 @@ export component ManagerWindow inherits Window {
     in-out property <int> sniper-currency: 0;
     in-out property <[LiveRow]> lives: [];
     in-out property <[AutomationRow]> automations: [];
+    in-out property <int> potion-threshold-percent: 40;
+    in-out property <string> potion-selection: "";
+    in-out property <string> ball-selection: "";
+    in-out property <string> automation-last-error: "";
     in-out property <string> total-xp: "0";
     in-out property <string> total-gold-rate: "0";
     in-out property <string> total-gold: "0";
@@ -435,6 +439,8 @@ export component ManagerWindow inherits Window {
     callback connect-account(int);
     callback travel(string);
     callback toggle-automation(string, bool);
+    callback set-potion-threshold(int);
+    callback save-combat-selection(string, string);
     callback sell-pokemon(string);
     callback sell-all-pokemon;
     callback reset-session;
@@ -919,7 +925,51 @@ export component ManagerWindow inherits Window {
                                     WoodButton { label: "Ir ao Centro"; clicked => { root.return-center(); } }
                                 }
                             }
+                            SectionHeading { label: "Poções e Balls configuradas"; }
+                            Rectangle {
+                                height: 158px;
+                                background: #422933; border-color: #955c46; border-width: 2px; border-radius: 8px;
+                                VerticalLayout {
+                                    padding: 12px; spacing: 8px;
+                                    HorizontalLayout {
+                                        Text { text: "IDs de poções"; color: #f2cfaa; vertical-alignment: center; }
+                                        LineEdit { text <=> root.potion-selection; placeholder-text: "200,201"; horizontal-stretch: 1; }
+                                        WoodButton { label: "Aplicar poções"; clicked => { root.save-combat-selection("potion", root.potion-selection); } }
+                                    }
+                                    HorizontalLayout {
+                                        Text { text: "IDs de Balls"; color: #f2cfaa; vertical-alignment: center; }
+                                        LineEdit { text <=> root.ball-selection; placeholder-text: "1,2,3"; horizontal-stretch: 1; }
+                                        WoodButton { label: "Aplicar Balls"; clicked => { root.save-combat-selection("ball", root.ball-selection); } }
+                                    }
+                                    Text { text: "A seleção é confirmada pelo estado do jogo; usar IDs válidos do catálogo."; color: #bda19a; font-size: 12px; }
+                                }
+                            }
                             SectionHeading { label: "Automações da conta"; }
+                            Rectangle {
+                                height: 68px; background: #422933; border-color: #955c46; border-width: 2px; border-radius: 8px;
+                                HorizontalLayout {
+                                    padding: 10px; spacing: 12px;
+                                    Text {
+                                        text: "Usar Potion quando HP ≤ " + root.potion-threshold-percent + "%";
+                                        color: #f2d4b6; font-weight: 700; vertical-alignment: center;
+                                    }
+                                    WoodButton {
+                                        label: "− 10%";
+                                        enabled: root.potion-threshold-percent > 10;
+                                        clicked => { root.set-potion-threshold(root.potion-threshold-percent - 10); }
+                                    }
+                                    WoodButton {
+                                        label: "+ 10%";
+                                        enabled: root.potion-threshold-percent < 100;
+                                        clicked => { root.set-potion-threshold(root.potion-threshold-percent + 10); }
+                                    }
+                                }
+                            }
+                            if root.automation-last-error != "" : Text {
+                                text: root.automation-last-error;
+                                color: #f0a79b;
+                                wrap: word-wrap;
+                            }
                             for automation in root.automations : ToggleRow {
                                 item: automation;
                                 toggled(key, value) => { root.toggle-automation(key, value); }
