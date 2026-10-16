@@ -3,6 +3,7 @@ import { WoodButton } from "widgets.slint";
 import { AccountRow, AccountCard } from "dashboard.slint";
 import { LiveRow, LiveStreamCard } from "lives.slint";
 import { HuntIvTile } from "hunt-tiles.slint";
+import { PokemonRatingStrip } from "pokemon-rating.slint";
 import { MarketPulseTopRow, MarketPulseRecentRow, MarketTopPulse, MarketRecentPulse } from "market-pulse.slint";
 
 export struct ProtocolFrameRow {
@@ -43,6 +44,12 @@ export struct InventoryRow {
     category: string,
     details: string,
     artwork: image,
+    frames: [image],
+    iv-total: string,
+    note: string,
+    power: string,
+    quality: string,
+    shiny: bool,
     has-artwork: bool,
     is-pokemon: bool,
     locked: bool,
@@ -80,6 +87,8 @@ export struct MarketPurchaseRow {
 export struct SessionDropRow {
     label: string,
     quantity: string,
+    artwork: image,
+    has-artwork: bool,
 }
 export struct SniperRuleRow {
     id: string,
@@ -261,6 +270,7 @@ export component ManagerWindow inherits Window {
     background: #160e17;
     default-font-family: "Segoe UI";
     in-out property <int> page: 0;
+    in-out property <int> sprite-frame: 0;
     in-out property <int> selected-account: 0;
     in-out property <bool> showing-detail: false;
     in-out property <string> hunt-search: "";
@@ -279,6 +289,7 @@ export component ManagerWindow inherits Window {
     in-out property <string> inventory-search: "";
     in-out property <int> inventory-tab: 0;
     in-out property <int> inventory-category: 0;
+    in-out property <string> inventory-count: "0";
     in-out property <bool> inventory-all-accounts: true;
     in-out property <int> pokemon-sort: 0;
     in-out property <string> pokemon-type-filter: "";
@@ -357,6 +368,9 @@ export component ManagerWindow inherits Window {
     in-out property <string> current-xp: "0";
     in-out property <string> current-gold: "0";
     in-out property <string> current-pokemon: "—";
+    in-out property <[image]> current-pokemon-frames: [];
+    in-out property <string> current-pokemon-iv-total: "—";
+    in-out property <string> current-pokemon-note: "—";
     in-out property <image> current-pokemon-art;
     in-out property <string> current-status: "Offline";
     in-out property <string> current-orbs: "0";
@@ -415,6 +429,14 @@ export component ManagerWindow inherits Window {
     callback route-changed(int);
     callback selected-account-changed(int);
 
+    // Repaint only visible sprite frame bindings, without a Rust snapshot
+    // refresh or additional network traffic on each animation frame.
+    Timer {
+        interval: 180ms;
+        running: root.showing-detail || root.page == 0 || root.page == 1
+            || (root.page == 3 && root.inventory-tab == 2);
+        triggered => { root.sprite-frame = Math.mod(root.sprite-frame + 1, 240); }
+    }
     HorizontalLayout {
         spacing: 0px;
         Rectangle {
@@ -538,7 +560,7 @@ export component ManagerWindow inherits Window {
                                 spacing: 14px;
                                 flex-wrap: wrap;
                                 Rectangle {
-                                    width: 350px; height: 273px;
+                                    width: 530px; height: 273px;
                                     background: #422934; border-radius: 9px;
                                     border-color: #986044; border-width: 2px;
                                     VerticalLayout {
@@ -567,7 +589,7 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                                 Rectangle {
-                                    width: 350px; height: 273px;
+                                    width: 530px; height: 435px;
                                     background: #422934; border-radius: 9px;
                                     border-color: #986044; border-width: 2px;
                                     VerticalLayout {
@@ -586,7 +608,9 @@ export component ManagerWindow inherits Window {
                                                     image-fit: cover;
                                                 }
                                                 Image {
-                                                    source: root.current-pokemon-art;
+                                                    source: root.current-pokemon-frames.length > 0
+                                                        ? root.current-pokemon-frames[Math.mod(root.sprite-frame, root.current-pokemon-frames.length)]
+                                                        : root.current-pokemon-art;
                                                     width: parent.width;
                                                     height: parent.height;
                                                     image-fit: contain;
@@ -619,6 +643,21 @@ export component ManagerWindow inherits Window {
                                                 }
                                             }
                                         }
+                                        PokemonRatingStrip {
+                                            quality: root.current-pokemon-quality;
+                                            power: root.current-pokemon-power;
+                                            iv-total: root.current-pokemon-iv-total;
+                                            note: root.current-pokemon-note;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 5px;
+                                            HuntIvTile { width: 78px; label: "HP"; value: root.hunt-iv-hp; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-hp.png"); }
+                                            HuntIvTile { width: 78px; label: "ATK"; value: root.hunt-iv-atk; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-attack.png"); }
+                                            HuntIvTile { width: 78px; label: "DEF"; value: root.hunt-iv-def; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-defense.png"); }
+                                            HuntIvTile { width: 78px; label: "SP.A"; value: root.hunt-iv-sp-atk; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-special-attack.png"); }
+                                            HuntIvTile { width: 78px; label: "SP.D"; value: root.hunt-iv-sp-def; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-defense.png"); }
+                                            HuntIvTile { width: 78px; label: "SPD"; value: root.hunt-iv-speed; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-speed.png"); }
+                                        }
                                         DisplayRow {
                                             heading: "HP";
                                             subheading: "Saúde do Pokémon";
@@ -632,7 +671,7 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                                 Rectangle {
-                                    width: 350px; height: 273px;
+                                    width: 530px; height: 273px;
                                     background: #422934; border-radius: 9px;
                                     border-color: #986044; border-width: 2px;
                                     VerticalLayout {
@@ -662,7 +701,7 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                                 Rectangle {
-                                    width: 350px; height: 250px;
+                                    width: 530px; height: 250px;
                                     background: #422934; border-radius: 9px;
                                     border-color: #986044; border-width: 2px;
                                     VerticalLayout {
@@ -689,7 +728,7 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                                 Rectangle {
-                                    width: 350px; height: 250px;
+                                    width: 530px; height: 250px;
                                     background: #422934; border-radius: 9px;
                                     border-color: #986044; border-width: 2px;
                                     VerticalLayout {
@@ -720,7 +759,7 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                                 Rectangle {
-                                    width: 350px; height: 250px;
+                                    width: 530px; height: 250px;
                                     background: #422934; border-radius: 9px;
                                     border-color: #986044; border-width: 2px;
                                     VerticalLayout {
@@ -776,16 +815,36 @@ export component ManagerWindow inherits Window {
                                 spacing: 8px;
                                 flex-wrap: wrap;
                                 for drop in root.session-drops : Rectangle {
-                                    width: 176px;
-                                    height: 58px;
+                                    width: 220px;
+                                    height: 62px;
                                     background: #3e2734;
                                     border-width: 1px;
                                     border-color: #88553c;
                                     border-radius: 6px;
-                                    VerticalLayout {
+                                    HorizontalLayout {
                                         padding: 7px;
-                                        Text { text: drop.label; color: #e9cdb7; font-size: 12px; }
-                                        Text { text: drop.quantity; color: #ffca78; font-weight: 750; }
+                                        spacing: 8px;
+                                        Rectangle {
+                                            width: 44px; height: 44px;
+                                            background: #292132;
+                                            border-radius: 5px;
+                                            if drop.has-artwork : Image {
+                                                source: drop.artwork;
+                                                width: parent.width; height: parent.height;
+                                                image-fit: contain;
+                                            }
+                                            if !drop.has-artwork : Text {
+                                                text: "◆";
+                                                color: #e4b978;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                        VerticalLayout {
+                                            spacing: 5px;
+                                            Text { text: drop.label; color: #e9cdb7; font-size: 12px; }
+                                            Text { text: drop.quantity; color: #ffca78; font-weight: 750; }
+                                        }
                                     }
                                 }
                             }
@@ -812,6 +871,7 @@ export component ManagerWindow inherits Window {
                                 spacing: 16px;
                                 flex-wrap: wrap;
                                 for account[i] in root.accounts : AccountCard {
+                                    frame-index: root.sprite-frame;
                                     item: account;
                                     session-mode: root.session-mode;
                                     details => { root.selected-account = i; root.selected-account-changed(i); root.showing-detail = true; }
