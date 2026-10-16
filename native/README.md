@@ -237,3 +237,13 @@ actions. The source-account/transport, most recent game update, and stale
 snapshot warning derive from the original Manager's authoritative LivesSnapshot.
 The native IRC connection status is shown separately: joining chat channels
 does **not** prove that a game viewing bonus has been granted.
+
+## Slint component organization
+
+Reusable styling widgets live in `native/ui/widgets.slint`. The original
+React Dashboard account cards and live bonus badges are now implemented in
+`native/ui/dashboard.slint`; the two-platform stream cards in
+`native/ui/lives.slint`; and hunt individual-value stat tiles in
+`native/ui/hunt-tiles.slint`. `main.slint` owns navigation and page state,
+importing these typed Slint components. This reduces the giant window's
+compile-time dependency tree while preserving the public Rust UI bindings.
