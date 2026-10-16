@@ -1028,20 +1028,46 @@ impl NativeCore {
         if ui.get_page() == 5 {
             let directory = self.accounts.lives_snapshot();
             ui.set_twitch_irc_status(self.twitch.state(&id).display().into());
-            let twitch = directory.twitch.into_iter().map(|channel| LiveRow {
-                name: channel.name.into(),
-                channel: channel.login.into(),
-                viewers: format_num(channel.viewers).into(),
-                platform: "Twitch".into(),
-            });
-            let kick = directory.kick.into_iter().filter(|channel| channel.online)
+            let transport = match directory.source_transport.as_ref() {
+                Some(ConnectionOwner::Background) => "Background",
+                Some(ConnectionOwner::Browser) => "Navegador",
+                Some(ConnectionOwner::Transition) => "Em transição",
+                _ => "Desconectada",
+            };
+            ui.set_lives_source_status(directory.source_account_nick.as_deref()
+                .map(|nickname| format!("Leitura por {nickname} • {transport}"))
+                .unwrap_or_else(|| "Aguardando uma conta leitora".into()).into());
+            ui.set_lives_updated_at(directory.updated_at.map(|at| {
+                format!("Atualizado às {}", format_event_time(at))
+            }).unwrap_or_else(|| "Aguardando dados do jogo".into()).into());
+            ui.set_lives_stale(directory.stale);
+
+            let mut twitch_channels = directory.twitch;
+            twitch_channels.sort_by(|a,b| b.viewers.cmp(&a.viewers)
+                .then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+            let twitch: Vec<_> = twitch_channels.into_iter()
+                .map(|channel| LiveRow {
+                    name: channel.name.into(),
+                    channel: channel.login.into(),
+                    viewers: format_num(channel.viewers).into(),
+                    platform: "Twitch".into(),
+                }).collect();
+            let mut kick_channels: Vec<_> = directory.kick.into_iter()
+                .filter(|channel| channel.online).collect();
+            kick_channels.sort_by(|a,b| b.viewers.cmp(&a.viewers)
+                .then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+            let kick: Vec<_> = kick_channels.into_iter()
                 .map(|channel| LiveRow {
                     name: channel.name.into(),
                     channel: channel.slug.into(),
                     viewers: format_num(channel.viewers).into(),
                     platform: "Kick".into(),
-                });
-            ui.set_lives(model(twitch.chain(kick).collect()));
+                }).collect();
+
+            ui.set_twitch_live_count(twitch.len().to_string().into());
+            ui.set_kick_live_count(kick.len().to_string().into());
+            ui.set_twitch_lives(model(twitch));
+            ui.set_kick_lives(model(kick));
         }
     }
 }

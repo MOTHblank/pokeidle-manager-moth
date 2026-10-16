@@ -228,3 +228,12 @@ XP/h, gold/h, kills/h and seconds/kill. Rates remain explicitly forecast
 values; HP sample confidence is shown. The native view combines these
 recommendations with the existing game-confirmed **Ir para hunt** action.
 The rendered results are capped at 80 just like the original React screen.
+
+## React Lives route
+
+The Lives screen now mirrors React's separate Twitch and Kick panels, with
+viewer-sorted cards, platform marks, online indicators and per-channel open
+actions. The source-account/transport, most recent game update, and stale
+snapshot warning derive from the original Manager's authoritative LivesSnapshot.
+The native IRC connection status is shown separately: joining chat channels
+does **not** prove that a game viewing bonus has been granted.

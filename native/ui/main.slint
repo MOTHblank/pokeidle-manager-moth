@@ -261,6 +261,77 @@ component SectionHeading inherits Text {
     height: 34px;
     vertical-alignment: center;
 }
+component LiveStreamCard inherits Rectangle {
+    in property <LiveRow> item;
+    callback open(string, string);
+    height: 119px;
+    background: #452b38;
+    border-color: #9f6648;
+    border-width: 2px;
+    border-radius: 8px;
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 10px;
+            Rectangle {
+                width: 42px; height: 42px;
+                background: root.item.platform == "Kick" ? #3c6539 : #6b3a86;
+                border-radius: 8px;
+                if root.item.platform == "Twitch" : Image {
+                    source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-twitch.png");
+                    width: parent.width;
+                    height: parent.height;
+                    image-fit: contain;
+                }
+                if root.item.platform == "Kick" : Text {
+                    text: "K";
+                    color: #fff4d5;
+                    font-size: 26px;
+                    font-weight: 840;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: root.item.name;
+                    color: #fff0d9;
+                    font-weight: 750;
+                    font-size: 16px;
+                }
+                Text {
+                    text: root.item.platform == "Twitch"
+                        ? "@" + root.item.channel : root.item.channel;
+                    color: #d1aea2;
+                    font-size: 12px;
+                }
+            }
+            Text {
+                text: root.item.viewers + " espectadores";
+                color: #c7e6b3;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                font-size: 12px;
+            }
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            Text {
+                text: "●  Ao vivo";
+                color: #a8e4b8;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+            WoodButton {
+                label: "Abrir canal ↗";
+                clicked => { root.open(root.item.platform, root.item.channel); }
+            }
+        }
+    }
+}
+
 component HuntIvTile inherits Rectangle {
     in property <string> label;
     in property <string> value;
@@ -589,6 +660,13 @@ export component ManagerWindow inherits Window {
     in-out property <string> sniper-min-balance: "0";
     in-out property <int> sniper-currency: 0;
     in-out property <[LiveRow]> lives: [];
+    in-out property <[LiveRow]> twitch-lives: [];
+    in-out property <[LiveRow]> kick-lives: [];
+    in-out property <string> lives-source-status: "Aguardando uma conta leitora";
+    in-out property <string> lives-updated-at: "—";
+    in-out property <bool> lives-stale: false;
+    in-out property <string> twitch-live-count: "0";
+    in-out property <string> kick-live-count: "0";
     in-out property <[AutomationRow]> automations: [];
     in-out property <int> potion-threshold-percent: 40;
     in-out property <string> potion-selection: "";
@@ -1875,23 +1953,156 @@ export component ManagerWindow inherits Window {
                         }
 
                         if !root.showing-detail && root.page == 5 : VerticalLayout {
-                            spacing: 13px;
-                            SectionHeading { label: "Lives do Pokeidle"; }
-                            Text { text: "Canais reportados pela conexão nativa do jogo"; color: #c6a99c; }
-                            Text { text: root.twitch-irc-status; color: #9bdfc9; font-size: 12px; }
-                            for channel in root.lives : Rectangle {
-                                height: 73px; border-width: 2px; border-color: #8f5341; border-radius: 7px; background: #3e2937;
-                                HorizontalLayout {
-                                    padding: 13px; spacing: 10px;
-                                    Image { width: 46px; height: 46px; source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-twitch.png"); image-fit: contain; }
-                                    VerticalLayout {
-                                        spacing: 4px;
-                                        Text { text: channel.name; font-weight: 700; color: #ffe9d0; font-size: 16px; }
-                                        Text { text: channel.platform + "  •  " + channel.channel; color: #caaca8; font-size: 12px; }
-                                    }
-                                    Text { text: channel.viewers + " espectadores"; color: #9fd4b2; vertical-alignment: center; }
-                                    WoodButton { label: "Abrir canal"; clicked => { root.open-stream(channel.platform, channel.channel); } }
+                            spacing: 14px;
+                            HorizontalLayout {
+                                SectionHeading { label: "Acompanhe quem está ao vivo"; }
+                                Text {
+                                    text: root.twitch-irc-status;
+                                    color: #a8ddbf;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: right;
                                 }
+                            }
+                            Rectangle {
+                                height: 60px;
+                                background: #412b37;
+                                border-width: 1px;
+                                border-color: root.lives-stale ? #ddad75 : #996148;
+                                border-radius: 7px;
+                                HorizontalLayout {
+                                    padding: 10px;
+                                    spacing: 9px;
+                                    Text {
+                                        text: root.lives-stale ? "●  Dados desatualizados" : "●  Núcleo local";
+                                        color: root.lives-stale ? #f2b680 : #afe6bc;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: root.lives-source-status;
+                                        color: #edd6bc;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: root.lives-updated-at;
+                                        color: #d0b8a8;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: right;
+                                    }
+                                }
+                            }
+                            if root.lives-stale : Text {
+                                text: "A conexão da conta leitora pode ter sido interrompida. Os últimos dados permanecem visíveis.";
+                                color: #ecc491;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 14px;
+                                Rectangle {
+                                    width: 49%;
+                                    background: #372632;
+                                    border-color: #995c49;
+                                    border-width: 2px;
+                                    border-radius: 8px;
+                                    VerticalLayout {
+                                        padding: 12px;
+                                        spacing: 10px;
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            Image {
+                                                source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-twitch.png");
+                                                width: 38px; height: 38px; image-fit: contain;
+                                            }
+                                            VerticalLayout {
+                                                spacing: 4px;
+                                                Text { text: "TRANSMISSÕES ATIVAS"; color: #bda69e; font-size: 11px; }
+                                                SectionHeading { label: "Twitch"; }
+                                            }
+                                            Text {
+                                                text: root.twitch-live-count;
+                                                color: #ffe7c3;
+                                                font-size: 20px;
+                                                font-weight: 780;
+                                                horizontal-alignment: right;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                        ListView {
+                                            height: 430px;
+                                            for channel in root.twitch-lives : LiveStreamCard {
+                                                item: channel;
+                                                open(platform, slug) => { root.open-stream(platform, slug); }
+                                            }
+                                        }
+                                        if root.twitch-live-count == "0" : Text {
+                                            text: "Nenhuma live da Twitch está online no momento.";
+                                            color: #c6ada5;
+                                            font-size: 12px;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 49%;
+                                    background: #372632;
+                                    border-color: #995c49;
+                                    border-width: 2px;
+                                    border-radius: 8px;
+                                    VerticalLayout {
+                                        padding: 12px;
+                                        spacing: 10px;
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            Rectangle {
+                                                width: 38px;
+                                                height: 38px;
+                                                background: #377747;
+                                                border-radius: 6px;
+                                                Text {
+                                                    text: "K";
+                                                    font-size: 25px;
+                                                    font-weight: 850;
+                                                    color: #fff5cf;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            VerticalLayout {
+                                                spacing: 4px;
+                                                Text { text: "TRANSMISSÕES ATIVAS"; color: #bda69e; font-size: 11px; }
+                                                SectionHeading { label: "Kick"; }
+                                            }
+                                            Text {
+                                                text: root.kick-live-count;
+                                                color: #ffe7c3;
+                                                font-size: 20px;
+                                                font-weight: 780;
+                                                horizontal-alignment: right;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                        ListView {
+                                            height: 430px;
+                                            for channel in root.kick-lives : LiveStreamCard {
+                                                item: channel;
+                                                open(platform, slug) => { root.open-stream(platform, slug); }
+                                            }
+                                        }
+                                        if root.kick-live-count == "0" : Text {
+                                            text: "Nenhuma live da Kick está online no momento.";
+                                            color: #c6ada5;
+                                            font-size: 12px;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                text: "A lista é obtida pelo estado do jogo. Twitch IRC é um canal separado e não prova bônus de visualização.";
+                                color: #c8b0a7;
+                                font-size: 12px;
+                                wrap: word-wrap;
                             }
                         }
 
