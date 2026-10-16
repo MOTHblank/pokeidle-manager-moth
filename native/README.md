@@ -51,12 +51,17 @@ comparison throughout the work.
   followed by native websocket handshake and server-confirmed handoff.
   No installed userscripts are required.
 
+- **Account details** now use the six original React detail groups:
+  account, active Pokémon, wild encounter/farm, hunt metrics, automation
+  status and hunt-session statistics, plus drops. All numeric projections
+  come from the live Rust account state. Session reset requires confirmation.
+
 ## Not yet complete
 
 This is **not a complete pixel-perfect or feature-complete React port**.
 Advanced Market history, rich item artwork and Inventory ownership aggregation,
 fully animated sprite
-sequences, real Dashboard hunt-session statistics, all automation settings,
+sequences, advanced session/drop artwork and all automation settings,
 fine-grained original layouts/typography, Hunt Atlas forecasts, Twitch OAuth onboarding/bonus verification and installation/update flow still need implementation.
 This milestone brings back the original page structure and navigation
 rather than asserting visual or behavioral parity that hasn't been tested.
