@@ -48,14 +48,16 @@ struct NativeCore {
     assets: assets::GameAssetService,
     hunt_reference: Arc<Mutex<Option<Arc<hunt_model::Reference>>>>,
     hunt_reference_status: Arc<Mutex<String>>,
-    hunt_reference_started: AtomicBool,
+    hunt_reference_started: Arc<AtomicBool>,
+    hunt_reference_last_attempt: Mutex<Option<Instant>>,
     hunt_observations: Mutex<hunt_observations::HpCollector>,
     sprites: Arc<Mutex<HashMap<u64, Image>>>,
     pending_sprites: Arc<Mutex<HashSet<u64>>>,
     sprite_rx: Mutex<mpsc::Receiver<SpriteReady>>,
     sprite_tx: mpsc::Sender<SpriteReady>,
     item_catalog: Arc<Mutex<Option<Arc<assets::GameItemCatalog>>>>,
-    item_catalog_started: AtomicBool,
+    item_catalog_started: Arc<AtomicBool>,
+    item_catalog_last_attempt: Mutex<Option<Instant>>,
     item_art: Mutex<HashMap<String, Image>>,
     pending_item_art: Mutex<HashSet<String>>,
     item_rx: Mutex<mpsc::Receiver<ItemReady>>,
@@ -128,13 +130,15 @@ impl NativeCore {
             accounts, market, assets,
             hunt_reference: Arc::new(Mutex::new(None)),
             hunt_reference_status: Arc::new(Mutex::new("Aguardando dados de combate".into())),
-            hunt_reference_started: AtomicBool::new(false),
+            hunt_reference_started: Arc::new(AtomicBool::new(false)),
+            hunt_reference_last_attempt: Mutex::new(None),
             hunt_observations: Mutex::new(hunt_observations::HpCollector::default()),
             sprites: Arc::new(Mutex::new(HashMap::new())),
             pending_sprites: Arc::new(Mutex::new(HashSet::new())),
             sprite_rx: Mutex::new(sprite_rx), sprite_tx,
             item_catalog: Arc::new(Mutex::new(None)),
-            item_catalog_started: AtomicBool::new(false),
+            item_catalog_started: Arc::new(AtomicBool::new(false)),
+            item_catalog_last_attempt: Mutex::new(None),
             item_art: Mutex::new(HashMap::new()),
             pending_item_art: Mutex::new(HashSet::new()),
             item_rx: Mutex::new(item_rx),
@@ -149,14 +153,20 @@ impl NativeCore {
     }
 
     fn load_hunt_reference(&self) {
-        if self.hunt_reference.lock().is_some() ||
-            self.hunt_reference_started.swap(true, Ordering::AcqRel) {
-            return;
+        if self.hunt_reference.lock().is_some() { return; }
+        {
+            let mut last_attempt = self.hunt_reference_last_attempt.lock();
+            if last_attempt.as_ref().is_some_and(|previous| previous.elapsed() < Duration::from_secs(45)) {
+                return;
+            }
+            if self.hunt_reference_started.swap(true, Ordering::AcqRel) { return; }
+            *last_attempt = Some(Instant::now());
         }
         *self.hunt_reference_status.lock() = "Obtendo referência de combate…".into();
         let assets = self.assets.clone();
         let reference = self.hunt_reference.clone();
         let status = self.hunt_reference_status.clone();
+        let loading = self.hunt_reference_started.clone();
         self.runtime.spawn(async move {
             match assets.where_to_hunt_reference().await.and_then(hunt_model::Reference::parse) {
                 Ok(value) => {
@@ -164,9 +174,10 @@ impl NativeCore {
                     *status.lock() = "Modelo nativo por rotação sustentada; previsão, não medição".into();
                 }
                 Err(_) => {
-                    *status.lock() = "Referência indisponível: não exibir previsões sem dados".into();
+                    *status.lock() = "Referência temporariamente indisponível; tentaremos atualizar".into();
                 }
             }
+            loading.store(false, Ordering::Release);
         });
     }
 
@@ -200,18 +211,25 @@ impl NativeCore {
     }
 
     fn start_item_catalog(&self) {
-        if self.item_catalog.lock().is_some()
-            || self.item_catalog_started.swap(true, Ordering::AcqRel) {
-            return;
+        if self.item_catalog.lock().is_some() { return; }
+        {
+            let mut last_attempt = self.item_catalog_last_attempt.lock();
+            if last_attempt.as_ref().is_some_and(|previous| previous.elapsed() < Duration::from_secs(45)) {
+                return;
+            }
+            if self.item_catalog_started.swap(true, Ordering::AcqRel) { return; }
+            *last_attempt = Some(Instant::now());
         }
         let loader = self.assets.clone();
         let sink = self.item_catalog.clone();
         let generation = self.asset_generation.clone();
+        let loading = self.item_catalog_started.clone();
         self.runtime.spawn(async move {
             if let Ok(catalog) = loader.item_catalog().await {
                 *sink.lock() = Some(Arc::new(catalog));
                 generation.fetch_add(1, Ordering::AcqRel);
             }
+            loading.store(false, Ordering::Release);
         });
     }
 
