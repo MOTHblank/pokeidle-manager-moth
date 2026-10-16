@@ -54,6 +54,15 @@ export struct MarketRow {
     gold: string,
     orbs: string,
 }
+export struct SniperRuleRow {
+    id: string,
+    label: string,
+    price: string,
+    budget: string,
+    spent: string,
+    quantity: string,
+    enabled: bool,
+}
 export struct LiveRow {
     name: string,
     channel: string,
@@ -352,6 +361,12 @@ export component ManagerWindow inherits Window {
     in-out property <[HuntRow]> hunts: [];
     in-out property <[InventoryRow]> inventory: [];
     in-out property <[MarketRow]> market: [];
+    in-out property <[SniperRuleRow]> sniper-rules: [];
+    in-out property <string> sniper-item-id: "";
+    in-out property <string> sniper-max-price: "";
+    in-out property <string> sniper-budget: "0";
+    in-out property <string> sniper-min-balance: "0";
+    in-out property <int> sniper-currency: 0;
     in-out property <[LiveRow]> lives: [];
     in-out property <[AutomationRow]> automations: [];
     in-out property <string> total-xp: "0";
@@ -381,6 +396,9 @@ export component ManagerWindow inherits Window {
     callback reset-session;
     callback return-center;
     callback refresh-market;
+    callback save-sniper-rule;
+    callback delete-sniper-rule(string);
+    callback toggle-sniper-rule(string, bool);
     callback open-stream(string, string);
     callback open-community;
     callback route-changed(int);
@@ -677,6 +695,61 @@ export component ManagerWindow inherits Window {
                                         Text { text: entry.quantity; color: #d0b0a3; }
                                         Text { text: entry.gold; color: #ffcd77; }
                                         Text { text: entry.orbs; color: #d7b8ea; }
+                                    }
+                                }
+                            }
+                            SectionHeading { label: "Compra automática — Sniper"; }
+                            HorizontalLayout {
+                                Text { text: "Conta"; color: #ebc9b5; vertical-alignment: center; }
+                                for account[i] in root.accounts : WoodButton {
+                                    label: account.name;
+                                    selected: root.selected-account == i;
+                                    clicked => { root.selected-account = i; root.selected-account-changed(i); }
+                                }
+                            }
+                            Rectangle {
+                                height: 151px; background: #422733; border-width: 2px; border-color: #8f5441; border-radius: 8px;
+                                VerticalLayout {
+                                    padding: 12px; spacing: 9px;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: "ID do item"; color: #ddbaa8; vertical-alignment: center; }
+                                        LineEdit { text <=> root.sniper-item-id; width: 120px; placeholder-text: "Ex.: 70032"; }
+                                        Text { text: "Preço máx. / unidade"; color: #ddbaa8; vertical-alignment: center; }
+                                        LineEdit { text <=> root.sniper-max-price; width: 125px; placeholder-text: "Preço"; }
+                                        WoodButton { label: root.sniper-currency == 0 ? "Gold" : "Orbs";
+                                            clicked => { root.sniper-currency = root.sniper-currency == 0 ? 1 : 0; } }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: "Orçamento (0=sem limite)"; color: #ddbaa8; vertical-alignment: center; }
+                                        LineEdit { text <=> root.sniper-budget; width: 130px; }
+                                        Text { text: "Saldo mínimo"; color: #ddbaa8; vertical-alignment: center; }
+                                        LineEdit { text <=> root.sniper-min-balance; width: 130px; }
+                                        WoodButton { label: "Salvar regra"; clicked => { root.save-sniper-rule(); } }
+                                    }
+                                    Text { text: "O núcleo nativo processa ofertas e confirma compras pelo protocolo. Orçamento e saldo mínimo são por conta."; color: #b8a3a0; font-size: 12px; wrap: word-wrap; }
+                                }
+                            }
+                            SectionHeading { label: "Regras configuradas"; }
+                            ListView {
+                                height: 300px;
+                                for rule in root.sniper-rules : Rectangle {
+                                    height: 73px; background: #392633; border-width: 1px; border-color: #965747;
+                                    HorizontalLayout {
+                                        padding: 10px; spacing: 12px;
+                                        VerticalLayout {
+                                            spacing: 5px;
+                                            Text { text: rule.label; color: #fff0d1; font-size: 14px; font-weight: 700; }
+                                            Text { text: "Máx. " + rule.price + "   •   Orçamento " + rule.budget +
+                                                "   •   Gasto " + rule.spent + "   •   Comprado " + rule.quantity; color: #ceb2a6; font-size: 12px; }
+                                        }
+                                        WoodButton {
+                                            label: rule.enabled ? "Ativa" : "Pausada";
+                                            selected: rule.enabled;
+                                            clicked => { root.toggle-sniper-rule(rule.id, !rule.enabled); }
+                                        }
+                                        WoodButton { label: "Excluir"; clicked => { root.delete-sniper-rule(rule.id); } }
                                     }
                                 }
                             }

@@ -34,8 +34,11 @@ comparison throughout the work.
 - **Inventários** route with item/ball/Pokémon tabs and search backed
   by account_inventory/account_depot, with virtualized scrolling so a large
   depot or bag does not instantiate hundreds of offscreen rows.
-- **Mercado** route using the original market summary reader in a virtualized table and original
-  SQLite migrations in an isolated native data directory.
+- **Mercado** route using the original market summary reader in a virtualized
+  table, plus native sniper rule creation (item, currency, per-unit cap,
+  budget, minimum balance), enable/pause and deletion, all delegated to
+  the original Rust MarketRuntime and SQLite migrations in an isolated
+  native data directory.
 - **Lives** reading the game's Twitch/Kick directory and a lightweight
   native Twitch IRC client capable of reconciling JOIN/PART membership
   without opening Twitch video tabs. A real Twitch user OAuth token is needed.
@@ -48,7 +51,8 @@ comparison throughout the work.
 ## Not yet complete
 
 This is **not a complete pixel-perfect or feature-complete React port**.
-The original advanced Market and Inventory workflows, fully animated sprite
+Advanced Market history, native rule editing and Inventory workflow details,
+fully animated sprite
 sequences, real Dashboard hunt-session statistics, all automation settings,
 fine-grained original layouts/typography, Hunt Atlas forecasts, Twitch OAuth onboarding/bonus verification and installation/update flow still need implementation.
 This milestone brings back the original page structure and navigation
