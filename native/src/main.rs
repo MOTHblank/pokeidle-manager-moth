@@ -398,6 +398,7 @@ impl NativeCore {
 
     fn refresh_ui(&self, ui: &ManagerWindow) {
         self.absorb_sprites();
+        if ui.get_showing_detail() { self.start_item_catalog(); }
         let lives = self.accounts.live_snapshots();
         // Record only game-confirmed max HP from this account's current
         // species/hunt/level; do not transpose samples between hunts.
@@ -560,6 +561,10 @@ impl NativeCore {
             .map(|v| format!("{v:.3}")).unwrap_or_else(|| "—".into()).into());
         ui.set_current_pokemon_power(active.and_then(|p| p.potencia)
             .map(|v| format!("P{v}")).unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_iv_total(active.and_then(|p| p.iv_total)
+            .map(format_num).unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_note(active.and_then(|p| p.nota)
+            .map(|note| format!("{note:.2}")).unwrap_or_else(|| "—".into()).into());
         let wild = snapshot.and_then(|s| s.state.wild.as_ref());
         ui.set_current_wild(wild.map(|w| format!("{} · Nv. {}", w.name, w.level))
             .unwrap_or_else(|| "Nenhum encontro ativo".into()).into());
@@ -989,6 +994,7 @@ impl NativeCore {
                 }
                 rows.sort_by(|a,b| a.title.cmp(&b.title));
             }
+            ui.set_inventory_count(format_num(rows.len() as u64).into());
             if tab == 2 {
                 // Virtualize four Pokémon cards per ListView row. Slint keeps
                 // only the visible row components alive, even for large Depots.
