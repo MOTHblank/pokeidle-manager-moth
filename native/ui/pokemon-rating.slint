@@ -1,0 +1,24 @@
+export component PokemonRatingStrip inherits Rectangle {
+    in property <string> quality: "—";
+    in property <string> power: "—";
+    in property <string> iv-total: "—";
+    in property <string> note: "—";
+    width: 480px;
+    height: 86px;
+    background: #3c2936;
+    border-radius: 7px;
+    border-color: #9b6246;
+    border-width: 1px;
+    VerticalLayout {
+        padding: 8px;
+        spacing: 5px;
+        Text { text: "AVALIAÇÃO DO POKÉMON"; color: #d6b6a2; font-size: 11px; font-weight: 700; }
+        HorizontalLayout {
+            spacing: 9px;
+            Text { text: "Qualidade  " + root.quality; color: #f6ca9d; font-size: 13px; }
+            Text { text: "Potência  " + root.power; color: #e8bafa; font-size: 13px; }
+            Text { text: "IV  " + root.iv-total; color: #bce3ae; font-size: 13px; }
+            Text { text: "Nota  " + root.note; color: #ffe19a; font-size: 13px; }
+        }
+    }
+}

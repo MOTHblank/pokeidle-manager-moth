@@ -17,6 +17,8 @@ export struct AccountRow {
     bonus-twitch: bool,
     bonus-event: bool,
     pokemon-art: image,
+    pokemon-frames: [image],
+    twitch-bonus: string,
     has-pokemon-art: bool,
     hp: string,
     hunt: string,
@@ -61,6 +63,7 @@ component AccountMiniStat inherits Rectangle {
 export component AccountCard inherits Rectangle {
     in property <AccountRow> item;
     in property <bool> session-mode: false;
+    in property <int> frame-index: 0;
     callback details;
     callback connect;
     width: 520px;
@@ -166,7 +169,9 @@ export component AccountCard inherits Rectangle {
                     image-fit: cover;
                 }
                 if root.item.has-pokemon-art : Image {
-                    source: root.item.pokemon-art;
+                    source: root.item.pokemon-frames.length > 0
+                        ? root.item.pokemon-frames[Math.mod(root.frame-index, root.item.pokemon-frames.length)]
+                        : root.item.pokemon-art;
                     width: parent.width;
                     height: parent.height;
                     image-fit: contain;

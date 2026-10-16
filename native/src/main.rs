@@ -51,7 +51,7 @@ struct NativeCore {
     hunt_reference_started: Arc<AtomicBool>,
     hunt_reference_last_attempt: Mutex<Option<Instant>>,
     hunt_observations: Mutex<hunt_observations::HpCollector>,
-    sprites: Arc<Mutex<HashMap<u64, Image>>>,
+    sprites: Arc<Mutex<HashMap<u64, Vec<Image>>>>,
     pending_sprites: Arc<Mutex<HashSet<u64>>>,
     sprite_rx: Mutex<mpsc::Receiver<SpriteReady>>,
     sprite_tx: mpsc::Sender<SpriteReady>,
@@ -75,7 +75,7 @@ struct NativeCore {
 }
 struct SpriteReady {
     looktype: u64,
-    pixels: Option<(u32, u32, Vec<u8>)>,
+    frames: Option<Vec<(u32, u32, Vec<u8>)>>,
 }
 struct ItemReady {
     id: String,
@@ -183,8 +183,10 @@ impl NativeCore {
 
     fn sprite(&self, looktype: Option<u64>) -> (Image, bool) {
         let Some(looktype) = looktype else { return (Image::default(), false) };
-        if let Some(image) = self.sprites.lock().get(&looktype) {
-            return (image.clone(), true);
+        if let Some(frames) = self.sprites.lock().get(&looktype) {
+            if let Some(image) = frames.first() {
+                return (image.clone(), true);
+            }
         }
         if !self.pending_sprites.lock().insert(looktype) {
             return (Image::default(), false);
@@ -195,19 +197,57 @@ impl NativeCore {
             let pixels = async {
                 let sprite = asset_service.pokemon_sprite(vec![looktype]).await.ok()??;
                 let file = asset_service.resolve_asset(sprite.asset_path).await.ok()?;
-                // Crop only the first idle sprite frame from the original atlas.
-                // Decoding and cropping happen off the GUI thread.
+                // Crop each genuine manifest frame from the original atlas
+                // off-thread. Slint displays frames on demand without polling
+                // the asset service on every animation tick.
                 let bitmap = image::open(file.path).ok()?;
-                if sprite.x.checked_add(sprite.width)? > bitmap.width()
-                    || sprite.y.checked_add(sprite.height)? > bitmap.height() {
-                    return None;
+                let mut coords = sprite.frames;
+                if coords.is_empty() {
+                    coords.push([sprite.x, sprite.y, sprite.width, sprite.height]);
                 }
-                let rgba = bitmap.crop_imm(sprite.x, sprite.y, sprite.width, sprite.height).to_rgba8();
-                Some((rgba.width(), rgba.height(), rgba.into_raw()))
+                let frames = coords.into_iter().filter_map(|[x, y, w, h]| {
+                    if x.checked_add(w)? > bitmap.width()
+                        || y.checked_add(h)? > bitmap.height() || w == 0 || h == 0 {
+                        return None;
+                    }
+                    let rgba = bitmap.crop_imm(x, y, w, h).to_rgba8();
+                    Some((rgba.width(), rgba.height(), rgba.into_raw()))
+                }).collect::<Vec<_>>();
+                (!frames.is_empty()).then_some(frames)
             }.await;
-            let _ = output.send(SpriteReady { looktype, pixels });
+            let _ = output.send(SpriteReady { looktype, frames: pixels });
         });
         (Image::default(), false)
+    }
+
+    fn sprite_frames(&self, looktype: Option<u64>) -> ModelRc<Image> {
+        // Calling sprite initiates a single asynchronous atlas fetch.
+        let _ = self.sprite(looktype);
+        model(looktype.and_then(|id| self.sprites.lock().get(&id).cloned())
+            .unwrap_or_default())
+    }
+
+    fn session_drop_art(&self, name: &str) -> (Image, bool) {
+        let catalog = self.item_catalog.lock().clone();
+        let lookup = catalog.as_ref().and_then(|catalog| {
+            let key = name.trim().to_lowercase();
+            catalog.items.iter()
+                .find(|(id, item)| {
+                    id.as_str() == name || item.name.to_lowercase() == key
+                        || item.name.to_lowercase().contains(&key)
+                })
+                .map(|(id, _)| id.clone())
+        }).unwrap_or_else(|| {
+            let normalized = name.to_lowercase();
+            if normalized.contains("chave") || normalized.contains("key") {
+                "70011".into()
+            } else if normalized.contains("shiny stone") {
+                "70012".into()
+            } else if normalized.contains("bicicleta") || normalized.contains("bicycle") {
+                "70013".into()
+            } else { name.to_owned() }
+        });
+        self.item_artwork(&lookup, &lookup)
     }
 
     fn start_item_catalog(&self) {
@@ -265,9 +305,12 @@ impl NativeCore {
     fn absorb_sprites(&self) {
         let receiver = self.sprite_rx.lock();
         while let Ok(sprite) = receiver.try_recv() {
-            if let Some((width, height, pixels)) = sprite.pixels {
-                let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, width, height);
-                self.sprites.lock().insert(sprite.looktype, Image::from_rgba8(buffer));
+            if let Some(frames) = sprite.frames {
+                let images = frames.into_iter().map(|(width, height, pixels)| {
+                    let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, width, height);
+                    Image::from_rgba8(buffer)
+                }).collect::<Vec<_>>();
+                self.sprites.lock().insert(sprite.looktype, images);
                 self.asset_generation.fetch_add(1, Ordering::AcqRel);
             }
             // Do not repeatedly fetch a non-existent looktype each UI poll.
@@ -355,6 +398,7 @@ impl NativeCore {
 
     fn refresh_ui(&self, ui: &ManagerWindow) {
         self.absorb_sprites();
+        if ui.get_showing_detail() { self.start_item_catalog(); }
         let lives = self.accounts.live_snapshots();
         // Record only game-confirmed max HP from this account's current
         // species/hunt/level; do not transpose samples between hunts.
@@ -425,6 +469,12 @@ impl NativeCore {
                 bonus_twitch: twitch_bonus > 0.0,
                 bonus_event: event_bonus > 0.0,
                 pokemon_art: self.sprite(pokemon.and_then(|p| p.look_shiny.or(p.looktype))).0,
+                pokemon_frames: self.sprite_frames(pokemon.and_then(|p| p.look_shiny.or(p.looktype))),
+                twitch_bonus: if online {
+                    bonus.and_then(|b| b.twitch_pct)
+                        .map(|pct| format!("Twitch XP +{pct:.1}%"))
+                        .unwrap_or_else(|| "Twitch: aguardando dados do jogo".into())
+                } else { "Twitch: conta offline".into() }.into(),
                 has_pokemon_art: pokemon.and_then(|p| p.look_shiny.or(p.looktype))
                     .is_some_and(|id| self.sprites.lock().contains_key(&id)),
                 hp: hp.into(),
@@ -480,6 +530,7 @@ impl NativeCore {
         let selected_looktype = snapshot.and_then(|s| s.state.active_pokemon.as_ref())
             .and_then(|p| p.look_shiny.or(p.looktype));
         ui.set_current_pokemon_art(self.sprite(selected_looktype).0);
+        ui.set_current_pokemon_frames(self.sprite_frames(selected_looktype));
         let ivs = snapshot.and_then(|live| live.state.active_pokemon.as_ref())
             .and_then(|poke| poke.ivs.as_ref());
         let iv_label = |value: Option<u64>| value
@@ -513,6 +564,10 @@ impl NativeCore {
             .map(|v| format!("{v:.3}")).unwrap_or_else(|| "—".into()).into());
         ui.set_current_pokemon_power(active.and_then(|p| p.potencia)
             .map(|v| format!("P{v}")).unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_iv_total(active.and_then(|p| p.iv_total)
+            .map(format_num).unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_note(active.and_then(|p| p.nota)
+            .map(|note| format!("{note:.2}")).unwrap_or_else(|| "—".into()).into());
         let wild = snapshot.and_then(|s| s.state.wild.as_ref());
         ui.set_current_wild(wild.map(|w| format!("{} · Nv. {}", w.name, w.level))
             .unwrap_or_else(|| "Nenhum encontro ativo".into()).into());
@@ -555,9 +610,13 @@ impl NativeCore {
             .unwrap_or_default()).into());
         ui.set_session_drops(model(session.map(|s| s.drops.iter()
             .filter(|(_, qty)| **qty > 0)
-            .map(|(label, qty)| SessionDropRow {
-                label: label.clone().into(),
-                quantity: format_num(*qty).into(),
+            .map(|(label, qty)| {
+                let (artwork, has_artwork) = self.session_drop_art(label);
+                SessionDropRow {
+                    label: label.clone().into(),
+                    quantity: format_num(*qty).into(),
+                    artwork, has_artwork,
+                }
             }).collect()).unwrap_or_default()));
 
 
@@ -863,6 +922,12 @@ impl NativeCore {
                     let (artwork, has_artwork) =
                         self.sprite(pokemon.look_shiny.or(pokemon.looktype));
                     rows.push(InventoryRow {
+                        frames: self.sprite_frames(pokemon.look_shiny.or(pokemon.looktype)),
+                        iv_total: pokemon.iv_total.map(|x| x.to_string()).unwrap_or_else(|| "—".into()).into(),
+                        note: pokemon.note.map(|x| format!("{x:.2}")).unwrap_or_else(|| "—".into()).into(),
+                        power: pokemon.power.map(|x| format!("P{x}")).unwrap_or_else(|| "—".into()).into(),
+                        quality: pokemon.quality.map(|x| format!("{x:.2}")).unwrap_or_else(|| "—".into()).into(),
+                        shiny: pokemon.shiny,
                         id: format!("{}:{}", account_id, pokemon.id).into(),
                         owner: owner.into(),
                         title: title.into(),
@@ -916,6 +981,9 @@ impl NativeCore {
                         format!("{}  •  {}", category, owner_label)
                     } else { String::new() };
                     rows.push(InventoryRow {
+                        frames: model(Vec::<Image>::new()),
+                        iv_total: "".into(), note: "".into(), power: "".into(),
+                        quality: "".into(), shiny: false,
                         id: item_id.into(),
                         owner: owner_label.into(),
                         title: name.into(),
@@ -929,6 +997,7 @@ impl NativeCore {
                 }
                 rows.sort_by(|a,b| a.title.cmp(&b.title));
             }
+            ui.set_inventory_count(format_num(rows.len() as u64).into());
             if tab == 2 {
                 // Virtualize four Pokémon cards per ListView row. Slint keeps
                 // only the visible row components alive, even for large Depots.
@@ -1057,12 +1126,40 @@ impl NativeCore {
                         "Gold".into()
                     } else { "Gemas".into() },
                 }).collect()));
+            let item_query = ui.get_sniper_item_search().trim().to_lowercase();
+            let choices: Vec<_> = market.item_metadata.iter()
+                .filter(|meta| item_query.is_empty()
+                    || meta.name.to_lowercase().contains(&item_query)
+                    || meta.item_id.to_string().contains(&item_query))
+                .take(24)
+                .map(|meta| {
+                    let summary = market.summaries.iter()
+                        .find(|row| row.item_id == meta.item_id);
+                    MarketItemChoice {
+                        id: meta.item_id.to_string().into(),
+                        name: meta.name.clone().into(),
+                        prices: summary.map(|row| format!("Gold {} · Gemas {}",
+                            row.min_gold.map(format_num).unwrap_or_else(|| "—".into()),
+                            row.min_orb.map(format_num).unwrap_or_else(|| "—".into())))
+                            .unwrap_or_else(|| "Preço indisponível".into()).into(),
+                    }
+                }).collect();
+            ui.set_sniper_items(model(choices));
             ui.set_sniper_rules(model(market.rules.iter()
                 .filter(|rule| rule.account_id == id)
                 .map(|rule| SniperRuleRow {
                     id: rule.id.clone().into(),
-                    label: format!("Item #{}  •  {}", rule.item_id,
-                        if rule.currency == market::MarketCurrency::Gold { "Gold" } else { "Orbs" }).into(),
+                    label: format!("{}  •  {}",
+                        names.get(&rule.item_id).copied()
+                            .map(str::to_owned).unwrap_or_else(|| format!("Item #{}", rule.item_id)),
+                        if rule.currency == market::MarketCurrency::Gold { "Gold" } else { "Gemas" }).into(),
+                    current_price: market.summaries.iter().find(|summary| summary.item_id == rule.item_id)
+                        .and_then(|summary| if rule.currency == market::MarketCurrency::Gold {
+                            summary.min_gold
+                        } else { summary.min_orb })
+                        .map(format_num).unwrap_or_else(|| "Sem oferta".into()).into(),
+                    balance: if rule.budget == 0 { "Ilimitado".into() }
+                        else { format_num(rule.budget.saturating_sub(rule.spent)).into() },
                     price: format_num(rule.max_price).into(),
                     budget: if rule.budget == 0 { "Ilimitado".into() }
                         else { format_num(rule.budget).into() },
@@ -1085,6 +1182,7 @@ impl NativeCore {
                     )
                 })
                 .map(|row| MarketRow {
+                    id: row.item_id.to_string().into(),
                     name: names.get(&row.item_id)
                         .map(|s| (*s).to_string())
                         .unwrap_or_else(|| format!("Item #{}", row.item_id)).into(),
@@ -1637,26 +1735,84 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
                 if item_id == 0 || max_price == 0 {
                     return Err("Item e preço máximo devem ser maiores que zero".into());
                 }
+                let previous = if ui.get_sniper_editing_id().is_empty() {
+                    None
+                } else {
+                    Some(save_market.market.snapshot().rules.into_iter()
+                        .find(|rule| rule.id == ui.get_sniper_editing_id().as_str()
+                            && rule.account_id == id)
+                        .ok_or_else(|| "Regra editada não encontrada nesta conta".to_string())?)
+                };
+                let currency = if ui.get_sniper_currency() == 0 {
+                    market::MarketCurrency::Gold
+                } else { market::MarketCurrency::Orb };
+                let existing = save_market.market.snapshot().rules;
+                if existing.iter().any(|rule| rule.account_id == id
+                    && rule.id != previous.as_ref().map(|r| r.id.as_str()).unwrap_or("")
+                    && rule.item_id == item_id && rule.currency == currency
+                    && rule.target_type == "item") {
+                    return Err("Já existe uma regra para este item e moeda nesta conta".into());
+                }
+                if let Some(old) = &previous {
+                    if budget > 0 && budget < old.spent {
+                        return Err("O orçamento não pode ser menor que o valor já gasto".into());
+                    }
+                }
                 let rule = market::MarketSniperRule {
-                    id: uuid::Uuid::new_v4().to_string(),
+                    id: previous.as_ref().map(|rule| rule.id.clone())
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
                     account_id: id,
                     target_type: "item".into(),
                     item_id,
-                    enabled: true,
-                    currency: if ui.get_sniper_currency() == 0 {
-                        market::MarketCurrency::Gold
-                    } else { market::MarketCurrency::Orb },
+                    enabled: previous.as_ref().map(|rule| rule.enabled).unwrap_or(true),
+                    currency,
                     max_price,
                     budget,
                     minimum_balance,
-                    quantity: 0, spent: 0, purchased_quantity: 0,
+                    quantity: 0,
+                    spent: previous.as_ref().map(|rule| rule.spent).unwrap_or(0),
+                    purchased_quantity: previous.as_ref().map(|rule| rule.purchased_quantity)
+                        .unwrap_or(0),
                 };
                 save_market.market.save_rule(rule)
             })();
             ui.set_status_line(match result {
-                Ok(()) => "Regra salva no Mercado nativo".into(),
+                Ok(()) => {
+                    ui.set_sniper_editing_id("".into());
+                    ui.set_sniper_item_id("".into());
+                    ui.set_sniper_item_search("".into());
+                    ui.set_sniper_max_price("".into());
+                    ui.set_sniper_picker_open(false);
+                    "Compra automática salva".into()
+                }
                 Err(error) => error.into(),
             });
+        }
+    });
+    let weak = ui.as_weak();
+    let edit_market = core.clone();
+    ui.on_edit_sniper_rule(move |rule_id| {
+        if let Some(ui) = weak.upgrade() {
+            let snapshot = edit_market.market.snapshot();
+            if let Some(rule) = snapshot.rules.iter().find(|rule| rule.id == rule_id.as_str()) {
+                if let Some(slot) = edit_market.profiles.iter()
+                    .position(|profile| profile.id() == rule.account_id) {
+                    ui.set_selected_account(slot as i32);
+                    // The account dropdown updates the same selected index.
+                    // Its Slint changed callback is intentionally a Rust no-op.
+                }
+                ui.set_sniper_editing_id(rule.id.clone().into());
+                ui.set_sniper_item_id(rule.item_id.to_string().into());
+                ui.set_sniper_item_search(snapshot.item_metadata.iter()
+                    .find(|entry| entry.item_id == rule.item_id)
+                    .map(|entry| entry.name.clone())
+                    .unwrap_or_else(|| format!("Item #{}", rule.item_id)).into());
+                ui.set_sniper_max_price(rule.max_price.to_string().into());
+                ui.set_sniper_currency(if rule.currency == market::MarketCurrency::Gold { 0 } else { 1 });
+                ui.set_sniper_budget(rule.budget.to_string().into());
+                ui.set_sniper_min_balance(rule.minimum_balance.to_string().into());
+                ui.set_sniper_picker_open(false);
+            }
         }
     });
     let weak = ui.as_weak();
@@ -1685,7 +1841,9 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     });
     ui.on_open_stream(move |platform, channel| {
         let name = channel.trim();
-        if name.is_empty() || !name.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
+        if name.is_empty() || !name.chars().all(|ch| {
+            ch.is_ascii_alphanumeric() || ch == '_' || (platform.as_str() == "Kick" && ch == '-')
+        }) {
             return;
         }
         let url = if platform.as_str() == "Kick" {
