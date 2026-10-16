@@ -55,6 +55,7 @@ struct NativeCore {
     runtime: Arc<Runtime>,
     profiles: Vec<Profile>,
     login: Vec<Arc<Mutex<LoginState>>>,
+    last_editor_account: Mutex<Option<String>>,
 }
 struct SpriteReady {
     looktype: u64,
@@ -110,7 +111,8 @@ impl NativeCore {
             sprites: Arc::new(Mutex::new(HashMap::new())),
             pending_sprites: Arc::new(Mutex::new(HashSet::new())),
             sprite_rx: Mutex::new(sprite_rx), sprite_tx,
-            twitch, runtime, profiles, login
+            twitch, runtime, profiles, login,
+            last_editor_account: Mutex::new(None)
         })
     }
 
@@ -430,17 +432,45 @@ impl NativeCore {
             ui.set_auto_revive(automation.auto_revive.unwrap_or(false));
             ui.set_auto_return(automation.auto_return_hunt.unwrap_or(false));
             ui.set_auto_sell(automation.auto_sale_loot.unwrap_or(false));
+            let potion_threshold = (automation.hp_threshold.unwrap_or(0.4) * 100.0)
+                .round().clamp(10.0, 100.0) as i32;
+            ui.set_potion_threshold_percent(potion_threshold);
+            let mut last = self.last_editor_account.lock();
+            if last.as_deref() != Some(&id) {
+                ui.set_potion_selection(automation.potion_ids.iter()
+                    .map(u64::to_string).collect::<Vec<_>>().join(",").into());
+                ui.set_ball_selection(automation.ball_ids.iter()
+                    .map(u64::to_string).collect::<Vec<_>>().join(",").into());
+                *last = Some(id.clone());
+            }
+            let capture = &s.state.capture_mode;
+            let auto_buy = &s.state.auto_buy_rules;
+            let potion_buy = auto_buy.iter()
+                .any(|r| r.enabled && matches!(&r.kind, domain::AutoBuyKind::Item));
+            let ball_buy = auto_buy.iter()
+                .any(|r| r.enabled && matches!(&r.kind, domain::AutoBuyKind::Ball));
             ui.set_automations(model(vec![
-                automation_row("autoPotion", "Auto Potion",
-                    "Usa as poções configuradas conforme o limite de HP", automation.auto_potion),
-                automation_row("autoRevive", "Auto Revive",
-                    "Revive Pokémon desmaiados", automation.auto_revive),
-                automation_row("autoVoltarHunt", "Retornar à hunt",
-                    "Retorna automaticamente depois do Centro", automation.auto_return_hunt),
-                automation_row("autoVendaLoot", "Venda automática",
-                    "Vende o loot conforme a automação do jogo", automation.auto_sale_loot),
+                automation_row("autoPotion", "Usar Poções",
+                    "Usa a poção selecionada no limite de HP", automation.auto_potion),
+                automation_row("autoRevive", "Usar Revive ao desmaiar",
+                    "Revive Pokémon quando o ativo desmaia", automation.auto_revive),
+                automation_row("ballUntilCapture", "Lançar até Capturar",
+                    "Envia Balls até conseguir uma captura",
+                    Some(matches!(capture, domain::CaptureMode::UntilCapture))),
+                automation_row("ballContinuous", "Lançar sem Parar",
+                    "Mantém lançamentos de Balls enquanto ativa",
+                    Some(matches!(capture, domain::CaptureMode::Continuous))),
+                automation_row("autoVendaLoot", "Venda Automática",
+                    "Vende loot comum automaticamente", automation.auto_sale_loot),
+                automation_row("returnToHunt", "Voltar à Hunt",
+                    "Retoma a caça após morte ou reset", automation.auto_return_hunt),
+                automation_row("autoBuyPotion", "Compra Automática de Poções",
+                    "Reabastece as poções configuradas", Some(potion_buy)),
+                automation_row("autoBuyBall", "Compra Automática de Balls",
+                    "Reabastece as Balls configuradas", Some(ball_buy)),
             ]));
         } else {
+            *self.last_editor_account.lock() = None;
             ui.set_automations(model(Vec::new()));
         }
 
@@ -759,16 +789,79 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     ui.on_toggle_automation(move |field, enabled| {
         if let Some(ui) = weak.upgrade() {
             let id = automation_core.account_id(ui.get_selected_account());
-            let result = if field.as_str() == "autoVendaLoot" {
-                automation_core.accounts.set_auto_sale(&id, enabled)
-            } else {
-                automation_core.accounts.set_automation_value(
-                    &id, field.as_str(), serde_json::Value::Bool(enabled)
-                )
+            let result: Result<(), String> = match field.as_str() {
+                "autoVendaLoot" => automation_core.accounts
+                    .set_auto_sale(&id, enabled).map_err(|e| e.to_string()),
+                "ballUntilCapture" => automation_core.accounts.set_capture_mode(&id,
+                    if enabled { domain::CaptureMode::UntilCapture }
+                    else { domain::CaptureMode::Off }).map_err(|e| e.to_string()),
+                "ballContinuous" => automation_core.accounts.set_capture_mode(&id,
+                    if enabled { domain::CaptureMode::Continuous }
+                    else { domain::CaptureMode::Off }).map_err(|e| e.to_string()),
+                "autoBuyPotion" => automation_core.accounts.set_auto_buy_enabled(&id,
+                    domain::AutoBuyKind::Item, enabled).map_err(|e| e.to_string()),
+                "autoBuyBall" => automation_core.accounts.set_auto_buy_enabled(&id,
+                    domain::AutoBuyKind::Ball, enabled).map_err(|e| e.to_string()),
+                "returnToHunt" | "autoPotion" | "autoRevive" => {
+                    let kind = if field.as_str() == "returnToHunt" {
+                        "autoVoltarHunt"
+                    } else { field.as_str() };
+                    automation_core.accounts.set_automation_value(&id,
+                        kind, serde_json::Value::Bool(enabled))
+                        .map_err(|e| e.to_string())
+                }
+                _ => Err("Automação nativa não suportada".into()),
             };
-            if let Err(error) = result {
-                ui.set_status_line(error.to_string().into());
-            }
+            ui.set_automation_last_error(
+                result.err().unwrap_or_default().into()
+            );
+        }
+    });
+    let weak = ui.as_weak();
+    let threshold_core = core.clone();
+    ui.on_set_potion_threshold(move |percent| {
+        if let Some(ui) = weak.upgrade() {
+            let id = threshold_core.account_id(ui.get_selected_account());
+            let clamped = percent.clamp(10, 100);
+            let result = threshold_core.accounts.set_automation_value(
+                &id, "hpLimiar", serde_json::Value::from(clamped as f64 / 100.0)
+            );
+            ui.set_automation_last_error(
+                result.err().map(|e| e.to_string()).unwrap_or_default().into()
+            );
+        }
+    });
+    let weak = ui.as_weak();
+    let selection_core = core.clone();
+    ui.on_save_combat_selection(move |kind, raw| {
+        if let Some(ui) = weak.upgrade() {
+            let id = selection_core.account_id(ui.get_selected_account());
+            let result: Result<(), String> = (|| {
+                let mut parsed = Vec::new();
+                for part in raw.split(',') {
+                    let name = part.trim();
+                    if name.is_empty() { continue; }
+                    let number: u64 = name.parse()
+                        .map_err(|_| format!("ID inválido: {name}"))?;
+                    if number == 0 || parsed.contains(&number) {
+                        return Err("IDs duplicados ou zero não são permitidos".into());
+                    }
+                    parsed.push(number);
+                }
+                if parsed.is_empty() || parsed.len() > 20 {
+                    return Err("Selecione entre 1 e 20 IDs válidos".into());
+                }
+                let category = match kind.as_str() {
+                    "potion" => domain::AutoBuyKind::Item,
+                    "ball" => domain::AutoBuyKind::Ball,
+                    _ => return Err("Categoria de item inválida".into()),
+                };
+                selection_core.accounts.set_automation_ids(&id, category, parsed)
+                    .map_err(|e| e.to_string())
+            })();
+            ui.set_automation_last_error(
+                result.err().unwrap_or_default().into()
+            );
         }
     });
     let weak = ui.as_weak();
