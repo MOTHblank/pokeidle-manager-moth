@@ -18,6 +18,7 @@
 mod bidi;
 mod firefox;
 mod hunt_model;
+mod preferences;
 mod twitch_irc;
 
 slint::include_modules!();
@@ -30,7 +31,7 @@ use twitch_irc::TwitchIrc;
 use market::MarketRuntime;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel};
-use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc}, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 use tokio::runtime::{Builder, Runtime};
 
 pub(crate) const fn recovery_validation_mode_active() -> bool { false }
@@ -56,6 +57,8 @@ struct NativeCore {
     profiles: Vec<Profile>,
     login: Vec<Arc<Mutex<LoginState>>>,
     last_editor_account: Mutex<Option<String>>,
+    preferences: Mutex<preferences::NativePreferences>,
+    preferences_path: PathBuf,
 }
 struct SpriteReady {
     looktype: u64,
@@ -87,6 +90,8 @@ impl NativeCore {
             .map_err(|e| e.to_string())?;
         let market = MarketRuntime::new(accounts.clone(), Arc::new(Mutex::new(db)));
         let assets = assets::GameAssetService::new(&dir)?;
+        let preferences_path = dir.join("ui-preferences.json");
+        let preferences = Mutex::new(preferences::NativePreferences::load(&preferences_path));
         let (sprite_tx, sprite_rx) = mpsc::channel();
         let twitch = TwitchIrc::default();
         {
@@ -112,7 +117,8 @@ impl NativeCore {
             pending_sprites: Arc::new(Mutex::new(HashSet::new())),
             sprite_rx: Mutex::new(sprite_rx), sprite_tx,
             twitch, runtime, profiles, login,
-            last_editor_account: Mutex::new(None)
+            last_editor_account: Mutex::new(None),
+            preferences, preferences_path,
         })
     }
 
@@ -179,6 +185,7 @@ impl NativeCore {
     }
 
     fn start_enabled_profiles(&self) {
+        if !self.preferences.lock().restore_enabled_profiles { return; }
         let enabled = read_moth_enabled_profiles();
         if enabled.is_empty() { return; }
         // Keep Slint Image/UI caches exclusively on the main thread. The
@@ -810,6 +817,25 @@ async fn authenticate(
 }
 
 fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
+    let settings_core = core.clone();
+    let weak = ui.as_weak();
+    ui.on_save_native_settings(move |interval, restore| {
+        if let Some(ui) = weak.upgrade() {
+            let config = preferences::NativePreferences {
+                interface_refresh_seconds: interval.max(1) as u32,
+                restore_enabled_profiles: restore,
+            }.normalized();
+            match config.save(&settings_core.preferences_path) {
+                Ok(()) => {
+                    *settings_core.preferences.lock() = config.clone();
+                    ui.set_ui_refresh_seconds(config.interface_refresh_seconds as i32);
+                    ui.set_restore_profiles_on_launch(config.restore_enabled_profiles);
+                    ui.set_status_line("Preferências nativas salvas".into());
+                }
+                Err(error) => ui.set_status_line(format!("Erro ao salvar: {error}").into()),
+            }
+        }
+    });
     let connecting = core.clone();
     ui.on_connect_account(move |index| connecting.login(index.max(0) as usize));
 
@@ -1044,14 +1070,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let core = Arc::new(NativeCore::new()?);
     let ui = ManagerWindow::new()?;
     bind_actions(&ui, core.clone());
+    {
+        let settings = core.preferences.lock();
+        ui.set_ui_refresh_seconds(settings.interface_refresh_seconds as i32);
+        ui.set_restore_profiles_on_launch(settings.restore_enabled_profiles);
+    }
     core.refresh_ui(&ui);
     core.start_enabled_profiles();
     let stop_irc = core.twitch.clone();
     let timer = Timer::default();
     let weak = ui.as_weak();
-    timer.start(TimerMode::Repeated, Duration::from_millis(1100), move || {
+    let mut last_refresh = Instant::now();
+    timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
         if let Some(ui) = weak.upgrade() {
-            core.refresh_ui(&ui);
+            let refresh = Duration::from_secs(ui.get_ui_refresh_seconds().clamp(1, 5) as u64);
+            if last_refresh.elapsed() >= refresh {
+                core.refresh_ui(&ui);
+                last_refresh = Instant::now();
+            }
         }
     });
     ui.run()?;

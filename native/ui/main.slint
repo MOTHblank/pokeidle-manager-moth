@@ -419,6 +419,8 @@ export component ManagerWindow inherits Window {
     in-out property <string> total-gems: "0";
     in-out property <string> connected-accounts: "0/4";
     in-out property <string> status-line: "Pronto";
+    in-out property <int> ui-refresh-seconds: 1;
+    in-out property <bool> restore-profiles-on-launch: true;
     in-out property <string> market-status: "Aguardando conexão";
     in-out property <string> twitch-irc-status: "Twitch IRC desativado";
     in-out property <string> current-account: "Game 1";
@@ -462,6 +464,7 @@ export component ManagerWindow inherits Window {
     in-out property <bool> auto-sell: false;
 
     callback connect-account(int);
+    callback save-native-settings(int, bool);
     callback travel(string);
     callback toggle-automation(string, bool);
     callback set-potion-threshold(int);
@@ -1307,6 +1310,64 @@ export component ManagerWindow inherits Window {
                         if !root.showing-detail && root.page == 6 : VerticalLayout {
                             spacing: 14px;
                             SectionHeading { label: "Configurações"; }
+                            SectionHeading { label: "Atualização da interface"; }
+                            Text {
+                                text: "Define a frequência de redesenho. O jogo mantém o próprio WebSocket, sem afetar coleta ou automações.";
+                                color: #c5aea7;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 9px;
+                                WoodButton {
+                                    label: "Rápido · 1s";
+                                    selected: root.ui-refresh-seconds == 1;
+                                    clicked => { root.save-native-settings(1, root.restore-profiles-on-launch); }
+                                }
+                                WoodButton {
+                                    label: "Normal · 2s";
+                                    selected: root.ui-refresh-seconds == 2;
+                                    clicked => { root.save-native-settings(2, root.restore-profiles-on-launch); }
+                                }
+                                WoodButton {
+                                    label: "Econômico · 5s";
+                                    selected: root.ui-refresh-seconds == 5;
+                                    clicked => { root.save-native-settings(5, root.restore-profiles-on-launch); }
+                                }
+                            }
+                            SectionHeading { label: "Inicialização"; }
+                            Rectangle {
+                                height: 97px;
+                                background: #402733;
+                                border-width: 2px;
+                                border-color: #90543f;
+                                border-radius: 8px;
+                                HorizontalLayout {
+                                    padding: 13px; spacing: 14px;
+                                    VerticalLayout {
+                                        spacing: 5px;
+                                        Text {
+                                            text: "Restaurar os perfis habilitados";
+                                            color: #f9dfbd;
+                                            font-weight: 720;
+                                        }
+                                        Text {
+                                            text: "Usa accounts.json do Moth Controller no próximo início; abre Firefox temporariamente e fecha após welcome.";
+                                            color: #bba9a1;
+                                            font-size: 12px;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                    WoodButton {
+                                        label: root.restore-profiles-on-launch ? "Automático" : "Manual";
+                                        selected: root.restore-profiles-on-launch;
+                                        clicked => {
+                                            root.save-native-settings(
+                                                root.ui-refresh-seconds, !root.restore-profiles-on-launch
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                             DisplayRow { heading: "Renderizador"; subheading: "Interface desktop nativa"; value: "Slint / Rust"; }
                             DisplayRow { heading: "Navegador"; subheading: "Apenas para autenticação"; value: "Firefox BiDi"; }
                             DisplayRow { heading: "Game WebSocket"; subheading: "Sem WebView2 ou Tauri"; value: "Rust nativo"; }
