@@ -428,6 +428,19 @@ impl NativeCore {
             let names: std::collections::HashMap<_,_> = market.item_metadata.iter()
                 .map(|m| (m.item_id, m.name.as_str())).collect();
             ui.set_market_status(market.reader_status.into());
+            ui.set_sniper_rules(model(market.rules.iter()
+                .filter(|rule| rule.account_id == id)
+                .map(|rule| SniperRuleRow {
+                    id: rule.id.clone().into(),
+                    label: format!("Item #{}  •  {}", rule.item_id,
+                        if rule.currency == market::MarketCurrency::Gold { "Gold" } else { "Orbs" }).into(),
+                    price: format_num(rule.max_price).into(),
+                    budget: if rule.budget == 0 { "Ilimitado".into() }
+                        else { format_num(rule.budget).into() },
+                    spent: format_num(rule.spent).into(),
+                    quantity: format_num(rule.purchased_quantity).into(),
+                    enabled: rule.enabled,
+                }).collect()));
             ui.set_market(model(market.summaries.iter().map(|row| MarketRow {
                 name: names.get(&row.item_id)
                     .map(|s| (*s).to_string())
@@ -590,6 +603,69 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
             .find(|s| s.account.status == ConnectionStatus::Online)
             .map(|s| s.account.id);
         let _ = market_core.market.set_reader(id);
+    });
+    let weak = ui.as_weak();
+    let save_market = core.clone();
+    ui.on_save_sniper_rule(move || {
+        if let Some(ui) = weak.upgrade() {
+            let id = save_market.account_id(ui.get_selected_account());
+            let result = (|| -> Result<(), String> {
+                let item_id: u64 = ui.get_sniper_item_id().trim().parse()
+                    .map_err(|_| "ID de item inválido".to_string())?;
+                let max_price: u64 = ui.get_sniper_max_price().trim().parse()
+                    .map_err(|_| "Preço máximo inválido".to_string())?;
+                let budget: u64 = ui.get_sniper_budget().trim().parse()
+                    .map_err(|_| "Orçamento inválido".to_string())?;
+                let minimum_balance: u64 = ui.get_sniper_min_balance().trim().parse()
+                    .map_err(|_| "Saldo mínimo inválido".to_string())?;
+                if item_id == 0 || max_price == 0 {
+                    return Err("Item e preço máximo devem ser maiores que zero".into());
+                }
+                let rule = market::MarketSniperRule {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    account_id: id,
+                    target_type: "item".into(),
+                    item_id,
+                    enabled: true,
+                    currency: if ui.get_sniper_currency() == 0 {
+                        market::MarketCurrency::Gold
+                    } else { market::MarketCurrency::Orb },
+                    max_price,
+                    budget,
+                    minimum_balance,
+                    quantity: 0, spent: 0, purchased_quantity: 0,
+                };
+                save_market.market.save_rule(rule)
+            })();
+            ui.set_status_line(match result {
+                Ok(()) => "Regra salva no Mercado nativo".into(),
+                Err(error) => error.into(),
+            });
+        }
+    });
+    let weak = ui.as_weak();
+    let remove_market = core.clone();
+    ui.on_delete_sniper_rule(move |id| {
+        if let Some(ui) = weak.upgrade() {
+            match remove_market.market.delete_rule(id.as_str()) {
+                Ok(()) => ui.set_status_line("Regra excluída".into()),
+                Err(error) => ui.set_status_line(error.into()),
+            }
+        }
+    });
+    let weak = ui.as_weak();
+    let toggle_market = core.clone();
+    ui.on_toggle_sniper_rule(move |rule_id, enabled| {
+        if let Some(ui) = weak.upgrade() {
+            let maybe_rule = toggle_market.market.snapshot().rules.into_iter()
+                .find(|rule| rule.id == rule_id.as_str());
+            if let Some(mut rule) = maybe_rule {
+                rule.enabled = enabled;
+                if let Err(error) = toggle_market.market.save_rule(rule) {
+                    ui.set_status_line(error.into());
+                }
+            }
+        }
     });
     ui.on_open_stream(move |platform, channel| {
         let name = channel.trim();
