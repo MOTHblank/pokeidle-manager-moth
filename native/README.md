@@ -217,3 +217,14 @@ profile header, genuine game sprite, Pokémon level, HP meter and a 2×2
 XP/Gold/Potion/Ball metrics section. Bonus badges show the **known game
 multipliers**, not an invented total. The Session toggle displays its own
 statistics, and an offline profile can still be started from its card.
+
+## React Where-to-Hunt port
+
+The native Onde Caçar screen now follows the original React composition:
+active-Pokémon portrait and individual IV tiles (HP, ATK, DEF, SP. ATK,
+SP. DEF, SPD); quality/potency; five game-derived bonus rows; hunt search;
+dynamic region selector; three ranking modes; and recommendation rows with
+XP/h, gold/h, kills/h and seconds/kill. Rates remain explicitly forecast
+values; HP sample confidence is shown. The native view combines these
+recommendations with the existing game-confirmed **Ir para hunt** action.
+The rendered results are capped at 80 just like the original React screen.
