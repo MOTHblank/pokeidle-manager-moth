@@ -967,6 +967,63 @@ impl NativeCore {
                         "Gold".into()
                     } else { "Gemas".into() },
                 }).collect()));
+            // React-like 24h market pulse: only game-confirmed history, scoped
+            // by currency, with a bounded number of UI rows per panel.
+            let market_currency = ui.get_market_currency_filter();
+            let market_top_pulse: Vec<_> = market.top_item_sales.iter()
+                .filter(|entry| match market_currency {
+                    1 => entry.currency.as_ref() == Some(&market::MarketCurrency::Gold),
+                    2 => entry.currency.as_ref() == Some(&market::MarketCurrency::Orb),
+                    _ => entry.currency.is_none(),
+                })
+                .take(8)
+                .map(|entry| {
+                    let gold_average = entry.average_gold_unit_price.or(
+                        if entry.currency.as_ref() == Some(&market::MarketCurrency::Gold) {
+                            entry.average_unit_price
+                        } else { None }
+                    );
+                    let gem_average = entry.average_orb_unit_price.or(
+                        if entry.currency.as_ref() == Some(&market::MarketCurrency::Orb) {
+                            entry.average_unit_price
+                        } else { None }
+                    );
+                    MarketPulseTopRow {
+                        item: entry.item_name.clone().into(),
+                        count: format_num(entry.transactions).into(),
+                        quantity: format_num(entry.quantity).into(),
+                        gold_average: gold_average.map(format_num)
+                            .unwrap_or_else(|| "—".into()).into(),
+                        gem_average: gem_average.map(format_num)
+                            .unwrap_or_else(|| "—".into()).into(),
+                    }
+                }).collect();
+            ui.set_market_pulse_top_available(!market_top_pulse.is_empty());
+            ui.set_market_pulse_top(model(market_top_pulse));
+            let market_recent_pulse: Vec<_> = market.recent_transactions.iter()
+                .filter(|entry| match market_currency {
+                    1 => entry.currency == market::MarketCurrency::Gold,
+                    2 => entry.currency == market::MarketCurrency::Orb,
+                    _ => true,
+                })
+                .take(8)
+                .map(|entry| MarketPulseRecentRow {
+                    item: entry.item_name.clone()
+                        .unwrap_or_else(|| entry.description.clone()).into(),
+                    buyer: if entry.buyer.trim().is_empty() {
+                        "Comprador não identificado".into()
+                    } else { entry.buyer.clone().into() },
+                    date: format_event_time(entry.occurred_at).into(),
+                    unit_price: entry.quantity.filter(|q| *q > 0 && entry.total % *q == 0)
+                        .map(|q| format_num(entry.total / q))
+                        .unwrap_or_else(|| "—".into()).into(),
+                    total: format_num(entry.total).into(),
+                    currency: if entry.currency == market::MarketCurrency::Gold {
+                        "Gold".into()
+                    } else { "Gemas".into() },
+                }).collect();
+            ui.set_market_pulse_recent_available(!market_recent_pulse.is_empty());
+            ui.set_market_pulse_recent(model(market_recent_pulse));
             ui.set_market_top_sales(model(market.top_item_sales.iter()
                 .map(|entry| MarketTopRow {
                     item: entry.item_name.clone().into(),
@@ -1014,15 +1071,34 @@ impl NativeCore {
                     quantity: format_num(rule.purchased_quantity).into(),
                     enabled: rule.enabled,
                 }).collect()));
-            ui.set_market(model(market.summaries.iter().map(|row| MarketRow {
-                name: names.get(&row.item_id)
-                    .map(|s| (*s).to_string())
-                    .unwrap_or_else(|| format!("Item #{}", row.item_id)).into(),
-                listings: format_num(row.listings).into(),
-                quantity: format_num(row.units).into(),
-                gold: row.min_gold.map(format_num).unwrap_or_else(|| "—".into()).into(),
-                orbs: row.min_orb.map(format_num).unwrap_or_else(|| "—".into()).into(),
-            }).collect()));
+            // Keep the offers view live while search/currency change in Slint.
+            // Filters do not mutate the reader or the market worker.
+            let market_query = ui.get_market_search().trim().to_lowercase();
+            let market_rows: Vec<_> = market.summaries.iter()
+                .filter(|row| {
+                    let named = names.get(&row.item_id).copied().unwrap_or("");
+                    let matches_search = market_query.is_empty()
+                        || named.to_lowercase().contains(&market_query)
+                        || row.item_id.to_string().contains(&market_query);
+                    let matches_currency = match market_currency {
+                        1 => row.min_gold.is_some(),
+                        2 => row.min_orb.is_some(),
+                        _ => true,
+                    };
+                    matches_search && matches_currency
+                })
+                .map(|row| MarketRow {
+                    name: names.get(&row.item_id)
+                        .map(|s| (*s).to_string())
+                        .unwrap_or_else(|| format!("Item #{}", row.item_id)).into(),
+                    listings: format_num(row.listings).into(),
+                    quantity: format_num(row.units).into(),
+                    gold: row.min_gold.map(format_num).unwrap_or_else(|| "—".into()).into(),
+                    orbs: row.min_orb.map(format_num).unwrap_or_else(|| "—".into()).into(),
+                })
+                .collect();
+            ui.set_market_offer_count(format_num(market_rows.len() as u64).into());
+            ui.set_market(model(market_rows));
         }
         if ui.get_page() == 6 && ui.get_developer_mode() && !ui.get_protocol_paused() {
             let frames = self.accounts.protocol_frames(&id).unwrap_or_default();
