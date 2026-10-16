@@ -939,7 +939,9 @@ export component ManagerWindow inherits Window {
                                                     image-fit: cover;
                                                 }
                                                 Image {
-                                                    source: root.current-pokemon-art;
+                                                    source: root.current-pokemon-frames.length > 0
+                                                        ? root.current-pokemon-frames[Math.mod(root.sprite-frame, root.current-pokemon-frames.length)]
+                                                        : root.current-pokemon-art;
                                                     width: parent.width;
                                                     height: parent.height;
                                                     image-fit: contain;
