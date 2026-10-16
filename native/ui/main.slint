@@ -387,6 +387,7 @@ export component ManagerWindow inherits Window {
     in-out property <string> hunt-model-status: "Calculando..." ;
     in-out property <string> inventory-search: "";
     in-out property <int> inventory-tab: 0;
+    in-out property <bool> inventory-all-accounts: true;
     in-out property <int> pokemon-sort: 0;
     in-out property <string> pokemon-type-filter: "";
     in-out property <string> pokemon-min-iv: "";
@@ -1010,9 +1011,19 @@ export component ManagerWindow inherits Window {
                             spacing: 13px;
                             SectionHeading { label: "Bag e Depot"; }
                             HorizontalLayout {
+                                WoodButton {
+                                    label: "Todas as contas";
+                                    selected: root.inventory-all-accounts;
+                                    clicked => { root.inventory-all-accounts = true; }
+                                }
                                 for account[i] in root.accounts : WoodButton {
-                                    label: account.name; selected: root.selected-account == i;
-                                    clicked => { root.selected-account = i; root.selected-account-changed(i); }
+                                    label: account.name;
+                                    selected: !root.inventory-all-accounts && root.selected-account == i;
+                                    clicked => {
+                                        root.inventory-all-accounts = false;
+                                        root.selected-account = i;
+                                        root.selected-account-changed(i);
+                                    }
                                 }
                             }
                             HorizontalLayout {
@@ -1052,7 +1063,9 @@ export component ManagerWindow inherits Window {
                                 VerticalLayout {
                                     padding: 9px; spacing: 8px;
                                     Text {
-                                        text: "Confirma vender todos os Pokémon não protegidos desta conta? Esta ação é irreversível.";
+                                        text: root.inventory-all-accounts
+                                            ? "Confirma vender todos os Pokémon não protegidos de TODAS AS CONTAS? Esta ação é irreversível."
+                                            : "Confirma vender todos os Pokémon não protegidos desta conta? Esta ação é irreversível.";
                                         color: #fff0cf;
                                         wrap: word-wrap;
                                     }
@@ -1136,7 +1149,7 @@ export component ManagerWindow inherits Window {
                                             enabled: !entry.locked;
                                             clicked => {
                                                 root.sale-id = entry.id;
-                                                root.sale-name = entry.title;
+                                                root.sale-name = entry.title + " — " + entry.owner;
                                             }
                                         }
                                     }
