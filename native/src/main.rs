@@ -967,6 +967,62 @@ impl NativeCore {
                         "Gold".into()
                     } else { "Gemas".into() },
                 }).collect()));
+            // React-like 24h market pulse: only game-confirmed history, scoped
+            // by currency, with a bounded number of UI rows per panel.
+            let market_currency = ui.get_market_currency_filter();
+            let market_top_pulse: Vec<_> = market.top_item_sales.iter()
+                .filter(|entry| match market_currency {
+                    1 => entry.currency.as_ref() == Some(&market::MarketCurrency::Gold),
+                    2 => entry.currency.as_ref() == Some(&market::MarketCurrency::Orb),
+                    _ => entry.currency.is_none(),
+                })
+                .take(8)
+                .map(|entry| {
+                    let gold_average = entry.average_gold_unit_price.or(
+                        if entry.currency.as_ref() == Some(&market::MarketCurrency::Gold) {
+                            entry.average_unit_price
+                        } else { None }
+                    );
+                    let gem_average = entry.average_orb_unit_price.or(
+                        if entry.currency.as_ref() == Some(&market::MarketCurrency::Orb) {
+                            entry.average_unit_price
+                        } else { None }
+                    );
+                    MarketPulseTopRow {
+                        item: entry.item_name.clone().into(),
+                        count: format_num(entry.transactions).into(),
+                        quantity: format_num(entry.quantity).into(),
+                        gold_average: gold_average.map(format_num)
+                            .unwrap_or_else(|| "—".into()).into(),
+                        gem_average: gem_average.map(format_num)
+                            .unwrap_or_else(|| "—".into()).into(),
+                    }
+                }).collect();
+            ui.set_market_pulse_top_available(!market_top_pulse.is_empty());
+            ui.set_market_pulse_top(model(market_top_pulse));
+            let market_recent_pulse: Vec<_> = market.recent_transactions.iter()
+                .filter(|entry| match market_currency {
+                    1 => entry.currency == market::MarketCurrency::Gold,
+                    2 => entry.currency == market::MarketCurrency::Orb,
+                    _ => true,
+                })
+                .take(8)
+                .map(|entry| MarketPulseRecentRow {
+                    item: entry.item_name.clone()
+                        .unwrap_or_else(|| entry.description.clone()).into(),
+                    buyer: if entry.buyer.trim().is_empty() {
+                        "Comprador não identificado".into()
+                    } else { entry.buyer.clone().into() },
+                    date: format_event_time(entry.occurred_at).into(),
+                    unit_price: exact_unit_price(entry.total, entry.quantity)
+                        .map(format_num).unwrap_or_else(|| "—".into()).into(),
+                    total: format_num(entry.total).into(),
+                    currency: if entry.currency == market::MarketCurrency::Gold {
+                        "Gold".into()
+                    } else { "Gemas".into() },
+                }).collect();
+            ui.set_market_pulse_recent_available(!market_recent_pulse.is_empty());
+            ui.set_market_pulse_recent(model(market_recent_pulse));
             ui.set_market_top_sales(model(market.top_item_sales.iter()
                 .map(|entry| MarketTopRow {
                     item: entry.item_name.clone().into(),
@@ -1014,15 +1070,32 @@ impl NativeCore {
                     quantity: format_num(rule.purchased_quantity).into(),
                     enabled: rule.enabled,
                 }).collect()));
-            ui.set_market(model(market.summaries.iter().map(|row| MarketRow {
-                name: names.get(&row.item_id)
-                    .map(|s| (*s).to_string())
-                    .unwrap_or_else(|| format!("Item #{}", row.item_id)).into(),
-                listings: format_num(row.listings).into(),
-                quantity: format_num(row.units).into(),
-                gold: row.min_gold.map(format_num).unwrap_or_else(|| "—".into()).into(),
-                orbs: row.min_orb.map(format_num).unwrap_or_else(|| "—".into()).into(),
-            }).collect()));
+            // Keep the offers view live while search/currency change in Slint.
+            // Filters do not mutate the reader or the market worker.
+            let market_query = ui.get_market_search().trim().to_lowercase();
+            let market_rows: Vec<_> = market.summaries.iter()
+                .filter(|row| {
+                    market_offer_matches(
+                        names.get(&row.item_id).copied().unwrap_or(""),
+                        row.item_id,
+                        row.min_gold,
+                        row.min_orb,
+                        &market_query,
+                        market_currency,
+                    )
+                })
+                .map(|row| MarketRow {
+                    name: names.get(&row.item_id)
+                        .map(|s| (*s).to_string())
+                        .unwrap_or_else(|| format!("Item #{}", row.item_id)).into(),
+                    listings: format_num(row.listings).into(),
+                    quantity: format_num(row.units).into(),
+                    gold: row.min_gold.map(format_num).unwrap_or_else(|| "—".into()).into(),
+                    orbs: row.min_orb.map(format_num).unwrap_or_else(|| "—".into()).into(),
+                })
+                .collect();
+            ui.set_market_offer_count(format_num(market_rows.len() as u64).into());
+            ui.set_market(model(market_rows));
         }
         if ui.get_page() == 6 && ui.get_developer_mode() && !ui.get_protocol_paused() {
             let frames = self.accounts.protocol_frames(&id).unwrap_or_default();
@@ -1098,6 +1171,34 @@ impl NativeCore {
             ui.set_kick_lives(model(kick));
         }
     }
+}
+
+// Pure display filters. Searching does not alter market readers, subscriptions,
+// sniper rules, or any upstream game-visible state.
+fn market_offer_matches(
+    name: &str,
+    item_id: u64,
+    min_gold: Option<u64>,
+    min_orb: Option<u64>,
+    query: &str,
+    currency: i32,
+) -> bool {
+    let needle = query.trim().to_lowercase();
+    let matches_search = needle.is_empty()
+        || name.to_lowercase().contains(&needle)
+        || item_id.to_string().contains(&needle);
+    let matches_currency = match currency {
+        1 => min_gold.is_some(),
+        2 => min_orb.is_some(),
+        _ => true,
+    };
+    matches_search && matches_currency
+}
+
+// Do not label a fractional or unknown amount as an exact unit price.
+fn exact_unit_price(total: u64, quantity: Option<u64>) -> Option<u64> {
+    quantity.filter(|q| *q > 0 && total % *q == 0)
+        .map(|q| total / q)
 }
 
 fn parse_sale_target(input: &str) -> Option<(String, u64)> {
@@ -1640,5 +1741,29 @@ mod native_inventory_tests {
         for input in ["123", "Game5:123", "Game1:0", "Game1:not-a-number", "Game1:123:456", "Game1:-1"] {
             assert_eq!(parse_sale_target(input), None);
         }
+    }
+}
+
+#[cfg(test)]
+mod native_market_ui_tests {
+    use super::{exact_unit_price, market_offer_matches};
+
+    #[test]
+    fn offers_are_filtered_by_text_id_and_currency_without_changing_snapshot() {
+        assert!(market_offer_matches("Heart Stone", 70032, Some(20), None, "heart", 0));
+        assert!(market_offer_matches("Heart Stone", 70032, Some(20), None, "70032", 1));
+        assert!(market_offer_matches("Heart Stone", 70032, Some(20), None, "  HEART  ", 1));
+        assert!(!market_offer_matches("Heart Stone", 70032, Some(20), None, "", 2));
+        assert!(!market_offer_matches("Heart Stone", 70032, Some(20), None, "potion", 0));
+        assert!(market_offer_matches("Orb item", 50, None, Some(0), "", 2));
+        assert!(market_offer_matches("No quotes", 51, None, None, "", 0));
+    }
+
+    #[test]
+    fn recent_sales_never_invent_inexact_unit_prices() {
+        assert_eq!(exact_unit_price(1_200, Some(3)), Some(400));
+        assert_eq!(exact_unit_price(1_200, Some(0)), None);
+        assert_eq!(exact_unit_price(1_200, None), None);
+        assert_eq!(exact_unit_price(1_201, Some(3)), None);
     }
 }

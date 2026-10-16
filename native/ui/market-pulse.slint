@@ -1,0 +1,142 @@
+import { ListView } from "std-widgets.slint";
+
+// Read-only market analysis cards modelled after the original React Mercado page.
+// Data comes exclusively from the Manager's authoritative MarketRuntime snapshot.
+export struct MarketPulseTopRow {
+    item: string,
+    count: string,
+    quantity: string,
+    gold-average: string,
+    gem-average: string,
+}
+
+export struct MarketPulseRecentRow {
+    item: string,
+    buyer: string,
+    date: string,
+    unit-price: string,
+    total: string,
+    currency: string,
+}
+
+export component MarketTopPulse inherits Rectangle {
+    in property <[MarketPulseTopRow]> entries: [];
+    in property <bool> has-results: false;
+    in property <string> status: "Aguardando histórico";
+
+    width: 526px;
+    height: 328px;
+    border-radius: 9px;
+    border-width: 2px;
+    border-color: #a06a4e;
+    background: #3f2937;
+    VerticalLayout {
+        padding: 11px;
+        spacing: 7px;
+        HorizontalLayout {
+            Text { text: "Mais vendidos"; color: #ffe3b0; font-size: 18px; font-weight: 780; }
+            Text { text: "ÚLTIMAS 24H"; color: #d1aa8b; font-size: 10px; horizontal-alignment: right; vertical-alignment: center; }
+        }
+        Text { text: root.status; color: #c4a9a0; font-size: 11px; overflow: elide; }
+        Rectangle {
+            height: 24px;
+            background: #65404a;
+            HorizontalLayout {
+                padding-left: 8px; padding-right: 8px; spacing: 8px;
+                Text { text: "ITEM"; color: #f4d1b0; font-size: 10px; horizontal-stretch: 1; vertical-alignment: center; }
+                Text { text: "VENDAS / UNID."; color: #f4d1b0; font-size: 10px; vertical-alignment: center; }
+            }
+        }
+        if !root.has-results : Text {
+            text: "Aguardando vendas confirmadas pelo jogo.";
+            color: #c7aca3;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+        if root.has-results : ListView {
+            height: 218px;
+            for sale in root.entries : Rectangle {
+                height: 63px;
+                background: #342633;
+                border-width: 1px;
+                border-color: #765344;
+                VerticalLayout {
+                    padding-left: 8px; padding-right: 8px; padding-top: 6px; padding-bottom: 6px;
+                    spacing: 4px;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: sale.item; color: #fff0d0; font-size: 13px; font-weight: 720; overflow: elide; horizontal-stretch: 1; }
+                        Text { text: sale.count + " / " + sale.quantity; color: #e2bb9d; font-size: 12px; }
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Text { text: "Gold/un  " + sale.gold-average; color: #ffce77; font-size: 12px; }
+                        Text { text: "Gemas/un  " + sale.gem-average; color: #d5b7eb; font-size: 12px; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component MarketRecentPulse inherits Rectangle {
+    in property <[MarketPulseRecentRow]> entries: [];
+    in property <bool> has-results: false;
+    in property <string> status: "Aguardando histórico";
+
+    width: 526px;
+    height: 328px;
+    border-radius: 9px;
+    border-width: 2px;
+    border-color: #a06a4e;
+    background: #3f2937;
+    VerticalLayout {
+        padding: 11px;
+        spacing: 7px;
+        HorizontalLayout {
+            Text { text: "Últimas vendas"; color: #ffe3b0; font-size: 18px; font-weight: 780; }
+            Text { text: "CONFIRMADAS"; color: #c8e0b4; font-size: 10px; horizontal-alignment: right; vertical-alignment: center; }
+        }
+        Text { text: root.status; color: #c4a9a0; font-size: 11px; overflow: elide; }
+        Rectangle {
+            height: 24px;
+            background: #65404a;
+            HorizontalLayout {
+                padding-left: 8px; padding-right: 8px; spacing: 8px;
+                Text { text: "ITEM / COMPRADOR"; color: #f4d1b0; font-size: 10px; horizontal-stretch: 1; vertical-alignment: center; }
+                Text { text: "VALOR"; color: #f4d1b0; font-size: 10px; vertical-alignment: center; }
+            }
+        }
+        if !root.has-results : Text {
+            text: "Sem vendas confirmadas nesta moeda.";
+            color: #c7aca3;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+        if root.has-results : ListView {
+            height: 218px;
+            for sale in root.entries : Rectangle {
+                height: 63px;
+                background: #342633;
+                border-width: 1px;
+                border-color: #765344;
+                VerticalLayout {
+                    padding-left: 8px; padding-right: 8px; padding-top: 6px; padding-bottom: 6px;
+                    spacing: 4px;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: sale.item; color: #fff0d0; font-size: 13px; font-weight: 720; overflow: elide; horizontal-stretch: 1; }
+                        Text { text: sale.total + " " + sale.currency; color: sale.currency == "Gold" ? #ffce77 : #d5b7eb; font-size: 12px; font-weight: 730; }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: sale.buyer + " • " + sale.date; color: #ccb1a5; font-size: 11px; horizontal-stretch: 1; overflow: elide; }
+                        Text { text: sale.unit-price + "/un"; color: #e2bb9d; font-size: 11px; }
+                    }
+                }
+            }
+        }
+    }
+}
