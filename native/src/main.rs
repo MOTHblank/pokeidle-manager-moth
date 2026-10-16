@@ -686,8 +686,20 @@ impl NativeCore {
                 for profile in &active_profiles {
                     if let Ok(read) = self.accounts.account_inventory(&profile.id(), None) {
                         for item in read.data.unwrap_or_default() {
-                            if tab == 1 && item.category != "balls" { continue; }
-                            if tab == 0 && item.category == "balls" { continue; }
+                            let category = item.category.to_lowercase();
+                            let ball = category.contains("ball");
+                            if tab == 1 && !ball { continue; }
+                            if tab == 0 && ball { continue; }
+                            if tab == 0 {
+                                let potion = category.contains("potion");
+                                let stone = category.contains("stone");
+                                match ui.get_inventory_category() {
+                                    1 if !potion => continue,
+                                    2 if !stone => continue,
+                                    3 if potion || stone => continue,
+                                    _ => {}
+                                }
+                            }
                             let group = inventory.entry(item.id.clone()).or_insert_with(||
                                 (item.asset_key.clone(), item.name.clone(),
                                  item.category.clone(), 0, Vec::new()));
@@ -720,7 +732,18 @@ impl NativeCore {
                 }
                 rows.sort_by(|a,b| a.title.cmp(&b.title));
             }
-            ui.set_inventory(model(rows));
+            if tab == 2 {
+                // Virtualize four Pokémon cards per ListView row. Slint keeps
+                // only the visible row components alive, even for large Depots.
+                let groups = rows.chunks(4).map(|chunk| InventoryGridRow {
+                    cells: model(chunk.to_vec()),
+                }).collect();
+                ui.set_inventory_grid(model(groups));
+                ui.set_inventory(model(Vec::new()));
+            } else {
+                ui.set_inventory_grid(model(Vec::new()));
+                ui.set_inventory(model(rows));
+            }
         }
         if ui.get_page() == 4 {
             let market = self.market.snapshot();

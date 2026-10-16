@@ -39,6 +39,8 @@ comparison throughout the work.
   descending sort by level, quality, potency, IV and calculated score,
   with explicit two-step confirmations for single-Pokémon and Depot sales.
   All sales delegate to the Manager game-confirmed Rust command dispatcher.
+  Items use artwork cards and category filters, while Pokémon use virtualized
+  four-card rows to avoid rendering offscreen Depot entries.
   Inventory can show all four accounts together, aggregating identical item IDs
   and keeping per-Pokémon ownership explicit. Cross-account Pokémon sales carry
   the source profile with the Pokémon ID; Depot-wide sales require confirmation

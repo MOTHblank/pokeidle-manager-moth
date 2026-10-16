@@ -54,6 +54,9 @@ export struct InventoryRow {
     is-pokemon: bool,
     locked: bool,
 }
+export struct InventoryGridRow {
+    cells: [InventoryRow],
+}
 export struct MarketRow {
     name: string,
     listings: string,
@@ -387,6 +390,7 @@ export component ManagerWindow inherits Window {
     in-out property <string> hunt-model-status: "Calculando..." ;
     in-out property <string> inventory-search: "";
     in-out property <int> inventory-tab: 0;
+    in-out property <int> inventory-category: 0;
     in-out property <bool> inventory-all-accounts: true;
     in-out property <int> pokemon-sort: 0;
     in-out property <string> pokemon-type-filter: "";
@@ -398,6 +402,7 @@ export component ManagerWindow inherits Window {
     in-out property <[AccountRow]> accounts: [];
     in-out property <[HuntRow]> hunts: [];
     in-out property <[InventoryRow]> inventory: [];
+    in-out property <[InventoryGridRow]> inventory-grid: [];
     in-out property <[MarketRow]> market: [];
     in-out property <[MarketHistoryRow]> market-history: [];
     in-out property <[MarketTopRow]> market-top-sales: [];
@@ -1035,6 +1040,13 @@ export component ManagerWindow inherits Window {
                                 Text { text: "Buscar"; vertical-alignment: center; color: #e0bba9; }
                                 LineEdit { text <=> root.inventory-search; placeholder-text: "Nome ou ID"; horizontal-stretch: 1; }
                             }
+                            if root.inventory-tab == 0 : HorizontalLayout {
+                                spacing: 9px;
+                                WoodButton { label: "Todos"; selected: root.inventory-category == 0; clicked => { root.inventory-category = 0; } }
+                                WoodButton { label: "Potions"; selected: root.inventory-category == 1; clicked => { root.inventory-category = 1; } }
+                                WoodButton { label: "Stones"; selected: root.inventory-category == 2; clicked => { root.inventory-category = 2; } }
+                                WoodButton { label: "Outros"; selected: root.inventory-category == 3; clicked => { root.inventory-category = 3; } }
+                            }
                             if root.inventory-tab == 2 : HorizontalLayout {
                                 spacing: 9px;
                                 Text { text: "Tipo"; color: #dcb9a9; vertical-alignment: center; }
@@ -1095,61 +1107,121 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                             }
-                            ListView {
-                                height: 445px;
-                                for entry in root.inventory : Rectangle {
-                                    height: root.inventory-tab == 2 ? 85px : 63px;
-                                    border-width: 1px;
-                                    border-color: #8e5745;
-                                    background: #3b2935;
-                                    HorizontalLayout {
-                                        padding: 9px;
-                                        spacing: 12px;
-                                        Rectangle {
-                                            width: 51px;
-                                            height: 51px;
-                                            border-radius: 6px;
-                                            background: #282033;
-                                            if entry.has-artwork : Image {
-                                                source: entry.artwork;
-                                                width: parent.width;
-                                                height: parent.height;
-                                                image-fit: contain;
-                                            }
-                                            if !entry.has-artwork : Text {
-                                                text: entry.is-pokemon ? "◉" : "▣";
-                                                color: #e5b96b;
-                                                font-size: 26px;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
-                                        }
+                            if root.inventory-tab != 2 : ScrollView {
+                                height: 490px;
+                                horizontal-scrollbar-policy: always-off;
+                                vertical-scrollbar-policy: as-needed;
+                                FlexboxLayout {
+                                    spacing: 11px;
+                                    flex-wrap: wrap;
+                                    for entry in root.inventory : Rectangle {
+                                        width: 168px; height: 162px;
+                                        border-width: 2px;
+                                        border-color: #995b46;
+                                        border-radius: 9px;
+                                        background: #402a37;
                                         VerticalLayout {
-                                            spacing: 4px;
+                                            padding: 9px; spacing: 6px;
+                                            Rectangle {
+                                                width: 70px; height: 70px;
+                                                background: #282033;
+                                                border-radius: 5px;
+                                                horizontal-alignment: center;
+                                                if entry.has-artwork : Image {
+                                                    source: entry.artwork;
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    image-fit: contain;
+                                                }
+                                                if !entry.has-artwork : Text {
+                                                    text: "▣";
+                                                    color: #e1b36c;
+                                                    font-size: 25px;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
                                             Text {
                                                 text: entry.title;
                                                 color: #ffead0;
-                                                font-size: 14px;
+                                                font-size: 12px;
                                                 font-weight: 720;
+                                                horizontal-alignment: center;
+                                            }
+                                            Text {
+                                                text: entry.quantity;
+                                                color: #ffcb73;
+                                                font-size: 15px;
+                                                font-weight: 740;
+                                                horizontal-alignment: center;
                                             }
                                             Text {
                                                 text: entry.details != "" ? entry.details : entry.category;
-                                                color: #ceafa4;
-                                                font-size: 12px;
+                                                color: #bca79e;
+                                                font-size: 10px;
+                                                horizontal-alignment: center;
                                             }
-                                            if entry.is-pokemon : Text { text: entry.owner; color: #9bcaa9; font-size: 11px; }
                                         }
-                                        Text {
-                                            text: entry.quantity;
-                                            color: #ffd27f;
-                                            vertical-alignment: center;
-                                        }
-                                        if entry.is-pokemon : WoodButton {
-                                            label: entry.locked ? "Protegido" : "Vender";
-                                            enabled: !entry.locked;
-                                            clicked => {
-                                                root.sale-id = entry.id;
-                                                root.sale-name = entry.title + " — " + entry.owner;
+                                    }
+                                }
+                            }
+                            if root.inventory-tab == 2 : ListView {
+                                height: 500px;
+                                for group in root.inventory-grid : HorizontalLayout {
+                                    height: 243px;
+                                    spacing: 11px;
+                                    for entry in group.cells : Rectangle {
+                                        width: 208px; height: 232px;
+                                        background: #3e2835;
+                                        border-width: 2px;
+                                        border-color: entry.locked ? #7e7888 : #986044;
+                                        border-radius: 9px;
+                                        VerticalLayout {
+                                            padding: 9px; spacing: 5px;
+                                            Text {
+                                                text: entry.owner;
+                                                color: #cbb3a4;
+                                                font-size: 12px;
+                                                font-weight: 720;
+                                            }
+                                            Rectangle {
+                                                height: 89px;
+                                                background: #272330;
+                                                border-radius: 5px;
+                                                if entry.has-artwork : Image {
+                                                    source: entry.artwork;
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    image-fit: contain;
+                                                }
+                                                if !entry.has-artwork : Text {
+                                                    text: "◉";
+                                                    color: #ebc582;
+                                                    font-size: 31px;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            Text {
+                                                text: entry.title;
+                                                color: #ffedd2;
+                                                font-size: 13px;
+                                                font-weight: 750;
+                                            }
+                                            Text {
+                                                text: entry.details;
+                                                color: #cbb7a6;
+                                                font-size: 11px;
+                                                wrap: word-wrap;
+                                            }
+                                            WoodButton {
+                                                label: entry.locked ? "Protegido" : "Vender";
+                                                enabled: !entry.locked;
+                                                height: 31px;
+                                                clicked => {
+                                                    root.sale-id = entry.id;
+                                                    root.sale-name = entry.title + " — " + entry.owner;
+                                                }
                                             }
                                         }
                                     }
