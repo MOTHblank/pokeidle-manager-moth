@@ -1,9 +1,8 @@
 name: Verificações automatizadas
 
+# Only run this workflow when explicitly requested.
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read

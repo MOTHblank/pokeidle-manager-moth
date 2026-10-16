@@ -1,15 +1,7 @@
 name: Native Slint compile
+# Only run this workflow when explicitly requested.
 on:
-  push:
-    paths:
-      - "native/**"
-      - "src-tauri/src/**"
-      - ".github/workflows/native.yml"
-  pull_request:
-    paths:
-      - "native/**"
-      - "src-tauri/src/**"
-      - ".github/workflows/native.yml"
+  workflow_dispatch:
 
 jobs:
   windows-native:
