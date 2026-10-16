@@ -809,10 +809,9 @@ impl MarketRuntime {
         let runtime = self.clone();
         tokio::spawn(async move {
             let database = runtime.database.clone();
-            let loaded = tokio::task::spawn_blocking(move || {
-                load_market_item_metadata(&database.lock())
-            })
-            .await;
+            let loaded =
+                tokio::task::spawn_blocking(move || load_market_item_metadata(&database.lock()))
+                    .await;
             match loaded {
                 Ok(Ok(entries)) => runtime.hydrate_item_metadata(entries),
                 Ok(Err(error)) => tracing::warn!(%error, "market item metadata load failed"),
