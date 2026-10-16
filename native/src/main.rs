@@ -396,15 +396,51 @@ impl NativeCore {
         }
         if ui.get_page() == 3 {
             let tab = ui.get_inventory_tab();
-            let search = ui.get_inventory_search().to_lowercase();
+            let search = ui.get_inventory_search().trim().to_lowercase();
             let mut result = Vec::new();
             if tab == 2 {
                 if let Ok(read) = self.accounts.account_depot(&id, None) {
-                    for p in read.data.unwrap_or_default() {
-                        let name = format!("{}  •  Lv. {}", p.name, p.level);
-                        if !name.to_lowercase().contains(search.as_str()) { continue; }
+                    let min_iv: u64 = ui.get_pokemon_min_iv().trim().parse().unwrap_or(0);
+                    let poke_type = ui.get_pokemon_type_filter().trim().to_ascii_lowercase();
+                    let mut pokemon = read.data.unwrap_or_default();
+                    pokemon.retain(|entry| {
+                        (search.is_empty() || entry.name.to_lowercase().contains(&search) ||
+                            entry.id.contains(&search)) &&
+                        (poke_type.is_empty() || entry.types.iter()
+                            .any(|item| item.to_lowercase().contains(&poke_type))) &&
+                        entry.iv_total.unwrap_or_default() >= min_iv
+                    });
+                    match ui.get_pokemon_sort() {
+                        1 => pokemon.sort_by(|a,b| b.quality.unwrap_or_default()
+                            .total_cmp(&a.quality.unwrap_or_default())),
+                        2 => pokemon.sort_by(|a,b| b.power.unwrap_or_default()
+                            .cmp(&a.power.unwrap_or_default())),
+                        3 => pokemon.sort_by(|a,b| b.iv_total.unwrap_or_default()
+                            .cmp(&a.iv_total.unwrap_or_default())),
+                        4 => pokemon.sort_by(|a,b| b.note.unwrap_or_default()
+                            .total_cmp(&a.note.unwrap_or_default())),
+                        5 => pokemon.sort_by(|a,b| b.id.cmp(&a.id)),
+                        _ => pokemon.sort_by(|a,b| b.level.cmp(&a.level)),
+                    }
+                    for p in pokemon {
+                        let subtitle = format!(
+                            "{}  •  P{}  •  IV {}  •  Q {:.3}  •  Nota {:.3}",
+                            p.types.join(" / "), p.power.unwrap_or_default(),
+                            p.iv_total.unwrap_or_default(),
+                            p.quality.unwrap_or_default(),
+                            p.note.unwrap_or_default()
+                        );
+                        let label = format!("{}{}  •  Lv. {}",
+                            if p.shiny { "✨ " } else { "" }, p.name, p.level);
                         result.push(InventoryRow {
-                            title: name.into(), quantity: p.id.to_string().into(), category: "Pokémon".into()
+                            id: p.id.into(),
+                            owner: self.profiles[index].label().into(),
+                            title: label.into(),
+                            quantity: "".into(),
+                            category: "Pokémon".into(),
+                            details: subtitle.into(),
+                            is_pokemon: true,
+                            locked: p.locked,
                         });
                     }
                 }
@@ -412,14 +448,20 @@ impl NativeCore {
                 for item in read.data.unwrap_or_default() {
                     if tab == 1 && item.category != "balls" { continue; }
                     if tab == 0 && item.category == "balls" { continue; }
-                    if !item.name.to_lowercase().contains(search.as_str())
-                        && !item.id.to_lowercase().contains(search.as_str()) { continue; }
+                    if !search.is_empty() && !item.name.to_lowercase().contains(&search)
+                        && !item.id.to_lowercase().contains(&search) { continue; }
                     result.push(InventoryRow {
+                        id: item.id.into(),
+                        owner: self.profiles[index].id().into(),
                         title: item.name.into(),
                         quantity: format_num(item.quantity).into(),
                         category: item.category.into(),
+                        details: "".into(),
+                        is_pokemon: false,
+                        locked: false,
                     });
                 }
+                result.sort_by(|a,b| a.title.cmp(&b.title));
             }
             ui.set_inventory(model(result));
         }
@@ -559,6 +601,32 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
         }
     });
 
+    let weak = ui.as_weak();
+    let sale_core = core.clone();
+    ui.on_sell_pokemon(move |pokemon_id| {
+        if let Some(ui) = weak.upgrade() {
+            let id = sale_core.account_id(ui.get_selected_account());
+            let result = pokemon_id.as_str().parse::<u64>()
+                .map_err(|_| "ID de Pokémon inválido".to_string())
+                .and_then(|pokemon_id| sale_core.accounts.sell_pokemon(&id, pokemon_id)
+                    .map_err(|error| error.to_string()));
+            ui.set_status_line(match result {
+                Ok(()) => "Venda enviada. Aguardando confirmação do jogo.".into(),
+                Err(error) => error.into(),
+            });
+        }
+    });
+    let weak = ui.as_weak();
+    let sell_all_core = core.clone();
+    ui.on_sell_all_pokemon(move || {
+        if let Some(ui) = weak.upgrade() {
+            let id = sell_all_core.account_id(ui.get_selected_account());
+            ui.set_status_line(match sell_all_core.accounts.sell_all_pokemon(&id) {
+                Ok(()) => "Venda do Depot enviada. Aguardando confirmação.".into(),
+                Err(error) => error.to_string().into(),
+            });
+        }
+    });
     let weak = ui.as_weak();
     let automation_core = core.clone();
     ui.on_toggle_automation(move |field, enabled| {

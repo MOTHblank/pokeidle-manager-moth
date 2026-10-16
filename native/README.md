@@ -32,8 +32,11 @@ comparison throughout the work.
 - **Automações** route, account picker, selected native automation
   toggles, Centro Pokémon and Where-to-hunt navigation.
 - **Inventários** route with item/ball/Pokémon tabs and search backed
-  by account_inventory/account_depot, with virtualized scrolling so a large
-  depot or bag does not instantiate hundreds of offscreen rows.
+  by account_inventory/account_depot, type and minimum-IV filtering,
+  descending sort by level, quality, potency, IV and calculated score,
+  with explicit two-step confirmations for single-Pokémon and Depot sales.
+  All sales delegate to the Manager game-confirmed Rust command dispatcher.
+  Lists are virtualized so a large Depot does not instantiate offscreen rows.
 - **Mercado** route using the original market summary reader in a virtualized
   table, plus native sniper rule creation (item, currency, per-unit cap,
   budget, minimum balance), enable/pause and deletion, all delegated to
@@ -51,7 +54,7 @@ comparison throughout the work.
 ## Not yet complete
 
 This is **not a complete pixel-perfect or feature-complete React port**.
-Advanced Market history, native rule editing and Inventory workflow details,
+Advanced Market history, rich item artwork and Inventory ownership aggregation,
 fully animated sprite
 sequences, real Dashboard hunt-session statistics, all automation settings,
 fine-grained original layouts/typography, Hunt Atlas forecasts, Twitch OAuth onboarding/bonus verification and installation/update flow still need implementation.

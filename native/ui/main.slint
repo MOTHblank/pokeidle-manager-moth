@@ -43,9 +43,14 @@ export struct HuntRow {
     current: bool,
 }
 export struct InventoryRow {
+    id: string,
+    owner: string,
     title: string,
     quantity: string,
     category: string,
+    details: string,
+    is-pokemon: bool,
+    locked: bool,
 }
 export struct MarketRow {
     name: string,
@@ -356,6 +361,12 @@ export component ManagerWindow inherits Window {
     in-out property <string> hunt-model-status: "Calculando..." ;
     in-out property <string> inventory-search: "";
     in-out property <int> inventory-tab: 0;
+    in-out property <int> pokemon-sort: 0;
+    in-out property <string> pokemon-type-filter: "";
+    in-out property <string> pokemon-min-iv: "";
+    in-out property <string> sale-id: "";
+    in-out property <string> sale-name: "";
+    in-out property <bool> confirm-sell-all: false;
     in-out property <bool> session-mode: false;
     in-out property <[AccountRow]> accounts: [];
     in-out property <[HuntRow]> hunts: [];
@@ -393,6 +404,8 @@ export component ManagerWindow inherits Window {
     callback connect-account(int);
     callback travel(string);
     callback toggle-automation(string, bool);
+    callback sell-pokemon(string);
+    callback sell-all-pokemon;
     callback reset-session;
     callback return-center;
     callback refresh-market;
@@ -656,12 +669,116 @@ export component ManagerWindow inherits Window {
                                 Text { text: "Buscar"; vertical-alignment: center; color: #e0bba9; }
                                 LineEdit { text <=> root.inventory-search; placeholder-text: "Nome ou ID"; horizontal-stretch: 1; }
                             }
+                            if root.inventory-tab == 2 : HorizontalLayout {
+                                spacing: 9px;
+                                Text { text: "Tipo"; color: #dcb9a9; vertical-alignment: center; }
+                                LineEdit { text <=> root.pokemon-type-filter; width: 115px; placeholder-text: "Todos"; }
+                                Text { text: "IV mínimo"; color: #dcb9a9; vertical-alignment: center; }
+                                LineEdit { text <=> root.pokemon-min-iv; width: 95px; placeholder-text: "0"; }
+                                WoodButton {
+                                    label: root.pokemon-sort == 0 ? "Nível ↓" :
+                                        root.pokemon-sort == 1 ? "Qualidade ↓" :
+                                        root.pokemon-sort == 2 ? "Potência ↓" :
+                                        root.pokemon-sort == 3 ? "IV ↓" :
+                                        root.pokemon-sort == 4 ? "Nota ↓" :
+                                        "Recentes ↓";
+                                    clicked => { root.pokemon-sort = (root.pokemon-sort + 1) % 6; }
+                                }
+                                WoodButton {
+                                    label: "Vender Depot";
+                                    clicked => { root.confirm-sell-all = true; }
+                                }
+                            }
+                            if root.confirm-sell-all : Rectangle {
+                                height: 99px;
+                                background: #572b37;
+                                border-width: 2px;
+                                border-color: #f1b365;
+                                VerticalLayout {
+                                    padding: 9px; spacing: 8px;
+                                    Text {
+                                        text: "Confirma vender todos os Pokémon não protegidos desta conta? Esta ação é irreversível.";
+                                        color: #fff0cf;
+                                        wrap: word-wrap;
+                                    }
+                                    HorizontalLayout {
+                                        WoodButton { label: "Cancelar"; clicked => { root.confirm-sell-all = false; } }
+                                        WoodButton { label: "Confirmar venda"; clicked => { root.sell-all-pokemon(); root.confirm-sell-all = false; } }
+                                    }
+                                }
+                            }
+                            if root.sale-id != "" : Rectangle {
+                                height: 95px;
+                                background: #572b37;
+                                border-width: 2px;
+                                border-color: #f1b365;
+                                VerticalLayout {
+                                    padding: 9px; spacing: 6px;
+                                    Text {
+                                        text: "Vender " + root.sale-name + "? Esta ação é irreversível.";
+                                        color: #fff0cf;
+                                    }
+                                    HorizontalLayout {
+                                        WoodButton { label: "Cancelar"; clicked => { root.sale-id = ""; } }
+                                        WoodButton {
+                                            label: "Confirmar";
+                                            clicked => { root.sell-pokemon(root.sale-id); root.sale-id = ""; }
+                                        }
+                                    }
+                                }
+                            }
                             ListView {
                                 height: 445px;
-                                for entry in root.inventory : DisplayRow {
-                                    heading: entry.title;
-                                    subheading: entry.category;
-                                    value: entry.quantity;
+                                for entry in root.inventory : Rectangle {
+                                    height: root.inventory-tab == 2 ? 85px : 63px;
+                                    border-width: 1px;
+                                    border-color: #8e5745;
+                                    background: #3b2935;
+                                    HorizontalLayout {
+                                        padding: 9px;
+                                        spacing: 12px;
+                                        Rectangle {
+                                            width: 51px;
+                                            height: 51px;
+                                            border-radius: 6px;
+                                            background: #282033;
+                                            Text {
+                                                text: entry.is-pokemon ? "◉" : "▣";
+                                                color: #e5b96b;
+                                                font-size: 26px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                        VerticalLayout {
+                                            spacing: 4px;
+                                            Text {
+                                                text: entry.title;
+                                                color: #ffead0;
+                                                font-size: 14px;
+                                                font-weight: 720;
+                                            }
+                                            Text {
+                                                text: entry.details != "" ? entry.details : entry.category;
+                                                color: #ceafa4;
+                                                font-size: 12px;
+                                            }
+                                            if entry.is-pokemon : Text { text: entry.owner; color: #9bcaa9; font-size: 11px; }
+                                        }
+                                        Text {
+                                            text: entry.quantity;
+                                            color: #ffd27f;
+                                            vertical-alignment: center;
+                                        }
+                                        if entry.is-pokemon : WoodButton {
+                                            label: entry.locked ? "Protegido" : "Vender";
+                                            enabled: !entry.locked;
+                                            clicked => {
+                                                root.sale-id = entry.id;
+                                                root.sale-name = entry.title;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
