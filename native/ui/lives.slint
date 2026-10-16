@@ -1,0 +1,80 @@
+import { WoodButton } from "widgets.slint";
+
+export struct LiveRow {
+    name: string,
+    channel: string,
+    viewers: string,
+    platform: string,
+}
+
+export component LiveStreamCard inherits Rectangle {
+    in property <LiveRow> item;
+    callback open(string, string);
+    height: 119px;
+    background: #452b38;
+    border-color: #9f6648;
+    border-width: 2px;
+    border-radius: 8px;
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 10px;
+            Rectangle {
+                width: 42px; height: 42px;
+                background: root.item.platform == "Kick" ? #3c6539 : #6b3a86;
+                border-radius: 8px;
+                if root.item.platform == "Twitch" : Image {
+                    source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-twitch.png");
+                    width: parent.width;
+                    height: parent.height;
+                    image-fit: contain;
+                }
+                if root.item.platform == "Kick" : Text {
+                    text: "K";
+                    color: #fff4d5;
+                    font-size: 26px;
+                    font-weight: 840;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: root.item.name;
+                    color: #fff0d9;
+                    font-weight: 750;
+                    font-size: 16px;
+                }
+                Text {
+                    text: root.item.platform == "Twitch"
+                        ? "@" + root.item.channel : root.item.channel;
+                    color: #d1aea2;
+                    font-size: 12px;
+                }
+            }
+            Text {
+                text: root.item.viewers + " espectadores";
+                color: #c7e6b3;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                font-size: 12px;
+            }
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            Text {
+                text: "●  Ao vivo";
+                color: #a8e4b8;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+            WoodButton {
+                label: "Abrir canal ↗";
+                clicked => { root.open(root.item.platform, root.item.channel); }
+            }
+        }
+    }
+}
+

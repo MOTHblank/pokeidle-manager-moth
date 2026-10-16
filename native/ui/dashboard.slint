@@ -1,0 +1,235 @@
+import { WoodButton } from "widgets.slint";
+
+export struct AccountRow {
+    id: string,
+    name: string,
+    initial: string,
+    status: string,
+    online: bool,
+    level: string,
+    pokemon: string,
+    pokemon-level: string,
+    hp-percent: int,
+    bonus-label: string,
+    bonus-vip: bool,
+    bonus-guild: bool,
+    bonus-guild-boost: bool,
+    bonus-twitch: bool,
+    bonus-event: bool,
+    pokemon-art: image,
+    has-pokemon-art: bool,
+    hp: string,
+    hunt: string,
+    xp: string,
+    gold: string,
+    xp-rate: string,
+    gold-rate: string,
+    potion: string,
+    ball: string,
+    mode: string,
+    pending: string,
+    vip: string,
+    session-kills: string,
+    session-captures: string,
+    session-xp: string,
+    session-pokemon-xp: string,
+    session-gold: string,
+    session-elapsed: string,
+    session-shinies: string,
+}
+
+component AccountMiniStat inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <image> artwork;
+    height: 50px;
+    border-color: #a46c4655;
+    border-width: 1px;
+    background: #3a2833;
+    HorizontalLayout {
+        padding: 6px;
+        spacing: 7px;
+        Image { source: root.artwork; width: 28px; height: 28px; image-fit: contain; }
+        VerticalLayout {
+            spacing: 3px;
+            Text { text: root.label; color: #e8c199; font-size: 11px; }
+            Text { text: root.value; color: #fff0d3; font-size: 14px; font-weight: 760; }
+        }
+    }
+}
+
+export component AccountCard inherits Rectangle {
+    in property <AccountRow> item;
+    in property <bool> session-mode: false;
+    callback details;
+    callback connect;
+    width: 520px;
+    min-width: 348px;
+    height: 366px;
+    border-width: 3px;
+    border-color: root.item.online ? #c87543 : #78534d;
+    border-radius: 9px;
+    background: #432637;
+    VerticalLayout {
+        padding: 13px;
+        spacing: 8px;
+        Rectangle {
+            height: 65px;
+            background: #703b43;
+            border-width: 1px;
+            border-color: #d4864c;
+            border-radius: 6px;
+            HorizontalLayout {
+                padding: 7px;
+                spacing: 9px;
+                Rectangle {
+                    width: 42px;
+                    height: 42px;
+                    background: #98475e;
+                    border-width: 2px;
+                    border-color: #f6c25d;
+                    border-radius: 7px;
+                    Text {
+                        text: root.item.initial;
+                        font-size: 23px;
+                        font-weight: 800;
+                        color: #fff5dd;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    spacing: 5px;
+                    HorizontalLayout {
+                        spacing: 7px;
+                        Text { text: root.item.name; color: #fff2d6; font-size: 17px; font-weight: 750; }
+                        Text { text: root.item.bonus-label; color: #a6ead3; font-size: 11px; font-weight: 770; }
+                    }
+                    HorizontalLayout {
+                        spacing: 5px;
+                        Text {
+                            text: root.item.status;
+                            color: root.item.online ? #a4edbb : #f1ad91;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+                        if root.item.bonus-vip : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-vip.png"); width: 18px; height: 18px; image-fit: contain; }
+                        if root.item.bonus-guild : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-guild.png"); width: 18px; height: 18px; image-fit: contain; }
+                        if root.item.bonus-guild-boost : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-guild-boost.png"); width: 18px; height: 18px; image-fit: contain; }
+                        if root.item.bonus-twitch : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-twitch.png"); width: 18px; height: 18px; image-fit: contain; }
+                        if root.item.bonus-event : Text { text: "★"; color: #f5cb80; font-size: 14px; }
+                    }
+                }
+                Text {
+                    text: root.item.mode;
+                    color: #ffe3b2;
+                    font-size: 12px;
+                    font-weight: 750;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+        if root.session-mode : VerticalLayout {
+            spacing: 10px;
+            Rectangle {
+                height: 53px;
+                background: #30202e;
+                border-color: #976041;
+                border-width: 1px;
+                HorizontalLayout {
+                    padding: 9px;
+                    Text { text: "Tempo da sessão"; color: #ead3bb; vertical-alignment: center; }
+                    Text { text: root.item.session-elapsed; color: #ffdc8c; font-size: 18px; font-weight: 750; horizontal-alignment: right; vertical-alignment: center; }
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                AccountMiniStat { label: "Kills"; value: root.item.session-kills; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-hunt.png"); }
+                AccountMiniStat { label: "Capturas"; value: root.item.session-captures; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-background.png"); }
+                AccountMiniStat { label: "Shinies"; value: root.item.session-shinies; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-diamond.png"); }
+            }
+            AccountMiniStat { label: "XP Treinador / Pokémon"; value: root.item.session-xp + " / " + root.item.session-pokemon-xp; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-level.png"); }
+            AccountMiniStat { label: "Gold da sessão"; value: root.item.session-gold; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-gold.png"); }
+        }
+        if !root.session-mode : HorizontalLayout {
+            spacing: 12px;
+            Rectangle {
+                width: 175px;
+                height: 205px;
+                background: #2b2233;
+                border-color: #a46f4b;
+                border-width: 1px;
+                border-radius: 6px;
+                Image {
+                    source: @image-url("../../src/assets/pokeidle-theme/backgrounds/pokemon-battle-backdrop.png");
+                    width: parent.width;
+                    height: parent.height;
+                    image-fit: cover;
+                }
+                if root.item.has-pokemon-art : Image {
+                    source: root.item.pokemon-art;
+                    width: parent.width;
+                    height: parent.height;
+                    image-fit: contain;
+                }
+                if !root.item.has-pokemon-art : Text {
+                    text: "?";
+                    color: #f5deb5;
+                    font-size: 50px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            VerticalLayout {
+                spacing: 7px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: root.item.pokemon; color: #fff0d9; font-size: 15px; font-weight: 750; }
+                    Text { text: root.item.pokemon-level; color: #e7cbb0; font-size: 12px; }
+                }
+                HorizontalLayout {
+                    spacing: 7px;
+                    Text { text: "HP"; color: #eac3b6; font-size: 12px; }
+                    Rectangle {
+                        height: 8px;
+                        horizontal-stretch: 1;
+                        background: #2a1721;
+                        border-color: #a76b3d;
+                        border-width: 1px;
+                        Rectangle {
+                            height: parent.height - 2px;
+                            width: (parent.width - 2px) * root.item.hp-percent / 100;
+                            x: 1px;
+                            y: 1px;
+                            background: #50bf74;
+                        }
+                    }
+                    Text { text: root.item.hp; color: #f3d3b6; font-size: 12px; font-weight: 750; }
+                }
+                HorizontalLayout {
+                    spacing: 3px;
+                    AccountMiniStat { label: "XP/h"; value: root.item.xp-rate; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-level.png"); }
+                    AccountMiniStat { label: "Gold/h"; value: root.item.gold-rate; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-gold.png"); }
+                }
+                HorizontalLayout {
+                    spacing: 3px;
+                    AccountMiniStat { label: "Potions"; value: root.item.potion; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-background.png"); }
+                    AccountMiniStat { label: "Balls"; value: root.item.ball; artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-hunt.png"); }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.item.hunt;
+                color: #f4d499;
+                font-size: 12px;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            WoodButton { label: "Detalhes"; height: 31px; clicked => { root.details(); } }
+            WoodButton { label: "Conectar"; height: 31px; enabled: !root.item.online; clicked => { root.connect(); } }
+        }
+    }
+}

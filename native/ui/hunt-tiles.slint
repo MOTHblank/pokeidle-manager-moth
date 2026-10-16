@@ -1,0 +1,28 @@
+export component HuntIvTile inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <image> icon;
+    height: 66px;
+    min-width: 76px;
+    background: #31252e;
+    border-width: 1px;
+    border-color: #986145;
+    border-radius: 6px;
+    VerticalLayout {
+        padding: 6px;
+        spacing: 5px;
+        HorizontalLayout {
+            spacing: 4px;
+            Image { source: root.icon; width: 21px; height: 21px; image-fit: contain; }
+            Text { text: root.label; color: #d9b8a1; font-size: 10px; }
+        }
+        Text {
+            text: root.value;
+            font-weight: 800;
+            color: #fff0d8;
+            font-size: 17px;
+            horizontal-alignment: center;
+        }
+    }
+}
+
