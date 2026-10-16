@@ -1,17 +1,21 @@
 [package]
 name = "pokeidle-manager-native"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "GPL-3.0-only"
 publish = false
-description = "Native, WebView2-free Pokeidle Manager"
+build = "build.rs"
+description = "Native Slint desktop port of Pokeidle Manager"
 
 [features]
 default = []
 mobile-local-server = []
 
+[build-dependencies]
+slint-build = "=1.18.1"
+
 [dependencies]
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "compat-1-2"] }
 futures-util = "0.3"
 parking_lot = "0.12"
 rusqlite = { version = "0.37", features = ["bundled"] }
@@ -25,6 +29,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
+open = "5"
 
 [profile.release]
 lto = "thin"

@@ -1,0 +1,21 @@
+name: Native Slint compile
+on:
+  push:
+    paths:
+      - "native/**"
+      - "src-tauri/src/**"
+      - ".github/workflows/native.yml"
+  pull_request:
+    paths:
+      - "native/**"
+      - "src-tauri/src/**"
+      - ".github/workflows/native.yml"
+
+jobs:
+  windows-native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check native desktop and Slint markup
+        run: cargo check --manifest-path native/Cargo.toml
