@@ -1519,6 +1519,18 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                             }
+                            if root.inventory-count == "0" : Rectangle {
+                                height: 61px;
+                                background: #362633;
+                                border-width: 1px; border-color: #77513f;
+                                border-radius: 7px;
+                                Text {
+                                    text: "Nenhum resultado. Verifique a conta, a busca e os filtros ou aguarde a primeira leitura.";
+                                    color: #d5baa8; font-size: 13px;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                    wrap: word-wrap;
+                                }
+                            }
                             if root.inventory-tab == 2 : ListView {
                                 height: 580px;
                                 for group in root.inventory-grid : HorizontalLayout {
@@ -1822,6 +1834,10 @@ export component ManagerWindow inherits Window {
                                             text <=> root.sniper-item-search;
                                             placeholder-text: "Nome ou ID do item";
                                             horizontal-stretch: 1;
+                                            edited(value) => {
+                                                root.sniper-item-id = "";
+                                                root.sniper-picker-open = true;
+                                            }
                                         }
                                         WoodButton {
                                             label: root.sniper-picker-open ? "Fechar busca" : "Procurar";
