@@ -126,6 +126,17 @@ the game awards any Twitch bonus. Displayed bonus values must originate from
 the game's authoritative state. A proper native Twitch authorization and
 verified game-bonus end-to-end path remain necessary for final parity.
 
+## Native preferences
+
+**Configurações** controls the actual interface refresh cadence (1/2/5 s)
+and whether enabled Moth Controller profiles are automatically restored on
+startup. Preferences are stored in the separate NativeManager data folder,
+never in the Firefox profiles or Controller settings. The UI refresh option
+only changes desktop presentation; game WebSocket connections, native
+market/autobuy worker and session receipts continue at their normal cadence.
+Choosing manual startup applies on the next launch; it does not disconnect an
+already authenticated account.
+
 ## Hunt forecast trust boundary
 
 The hunt model uses the original Manager's read-only reference fetch and
