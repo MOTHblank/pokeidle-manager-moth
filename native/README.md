@@ -259,3 +259,28 @@ React Dashboard account cards and live bonus badges are now implemented in
 `native/ui/hunt-tiles.slint`. `main.slint` owns navigation and page state,
 importing these typed Slint components. This reduces the giant window's
 compile-time dependency tree while preserving the public Rust UI bindings.
+
+## React Mercado analysis layout (incremental)
+
+The native Mercado route now follows the original React page's reading order:
+the **Mais vendidos** and **Últimas vendas** 24-hour pulse cards appear side
+by side above the **Ofertas ativas** table instead of being hidden behind
+mutually exclusive tabs. Narrow windows wrap the cards rather than
+compressing their columns. Gold/Gemas filtering applies to the two market
+pulse panels and offers, and the offers search accepts a case-insensitive
+item name or numeric item ID. Counts reflect the currently visible offers,
+not an invented market total.
+
+The two pulse cards only show entries returned by the Manager's existing
+game-confirmed market history. The displayed unit price is exact only when
+a nonzero quantity divides the recorded total evenly; otherwise it is
+marked as unavailable. Full global history, top-sales detail and
+Manager-local purchases remain accessible as collapsible sections below
+the offers table, with the original Sniper rule editor and actions
+unchanged. Source-specific notices continue to distinguish confirmed
+transactions from local purchase attempts.
+
+The read-only filtering and exact-unit-price helpers have native Rust
+unit tests. This change has not been validated by a Windows runtime or a
+local Slint compiler in this environment; the native CI/build process is
+still required to identify any platform-specific UI errors.
