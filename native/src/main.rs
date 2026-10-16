@@ -470,8 +470,11 @@ impl NativeCore {
                 bonus_event: event_bonus > 0.0,
                 pokemon_art: self.sprite(pokemon.and_then(|p| p.look_shiny.or(p.looktype))).0,
                 pokemon_frames: self.sprite_frames(pokemon.and_then(|p| p.look_shiny.or(p.looktype))),
-                twitch_bonus: if online { format!("Twitch XP +{twitch_bonus:.1}%") }
-                    else { "Twitch: sem leitura".into() }.into(),
+                twitch_bonus: if online {
+                    bonus.and_then(|b| b.twitch_pct)
+                        .map(|pct| format!("Twitch XP +{pct:.1}%"))
+                        .unwrap_or_else(|| "Twitch: aguardando dados do jogo".into())
+                } else { "Twitch: conta offline".into() }.into(),
                 has_pokemon_art: pokemon.and_then(|p| p.look_shiny.or(p.looktype))
                     .is_some_and(|id| self.sprites.lock().contains_key(&id)),
                 hp: hp.into(),
@@ -1838,7 +1841,9 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
     });
     ui.on_open_stream(move |platform, channel| {
         let name = channel.trim();
-        if name.is_empty() || !name.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
+        if name.is_empty() || !name.chars().all(|ch| {
+            ch.is_ascii_alphanumeric() || ch == '_' || (platform.as_str() == "Kick" && ch == '-')
+        }) {
             return;
         }
         let url = if platform.as_str() == "Kick" {
