@@ -178,17 +178,19 @@ impl NativeCore {
         }
     }
 
-    fn start_enabled_profiles(self: &Arc<Self>) {
+    fn start_enabled_profiles(&self) {
         let enabled = read_moth_enabled_profiles();
         if enabled.is_empty() { return; }
-        let core = self.clone();
+        // Keep Slint Image/UI caches exclusively on the main thread. The
+        // Tokio worker receives only Send + Sync components of NativeCore.
+        let accounts = self.accounts.clone();
+        let profiles = self.profiles.clone();
+        let login_states = self.login.clone();
         self.runtime.spawn(async move {
-            // One temporary Firefox at a time. Each profile has a distinct
-            // BiDi socket and remains closed once Rust confirms ownership.
             for index in enabled {
-                let Some(profile) = core.profiles.get(index).cloned() else { continue };
+                let Some(profile) = profiles.get(index).cloned() else { continue };
                 if !profile.path.is_dir() { continue; }
-                let status = core.login[index].clone();
+                let status = login_states[index].clone();
                 {
                     let mut state = status.lock();
                     if state.busy { continue; }
@@ -196,7 +198,7 @@ impl NativeCore {
                     state.message = "Autenticando perfil ativo do Moth Controller…".into();
                 }
                 let result = authenticate(
-                    profile.clone(), core.accounts.clone(), status.clone()
+                    profile.clone(), accounts.clone(), status.clone()
                 ).await;
                 {
                     let mut state = status.lock();
@@ -207,7 +209,7 @@ impl NativeCore {
                     };
                 }
                 if result.is_err() {
-                    let _ = core.accounts.transition(
+                    let _ = accounts.transition(
                         &profile.id(), AccountRuntimeState::Error
                     );
                 }
