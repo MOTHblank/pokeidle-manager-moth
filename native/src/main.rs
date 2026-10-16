@@ -51,7 +51,7 @@ struct NativeCore {
     hunt_reference_started: Arc<AtomicBool>,
     hunt_reference_last_attempt: Mutex<Option<Instant>>,
     hunt_observations: Mutex<hunt_observations::HpCollector>,
-    sprites: Arc<Mutex<HashMap<u64, Image>>>,
+    sprites: Arc<Mutex<HashMap<u64, Vec<Image>>>>,
     pending_sprites: Arc<Mutex<HashSet<u64>>>,
     sprite_rx: Mutex<mpsc::Receiver<SpriteReady>>,
     sprite_tx: mpsc::Sender<SpriteReady>,
@@ -75,7 +75,7 @@ struct NativeCore {
 }
 struct SpriteReady {
     looktype: u64,
-    pixels: Option<(u32, u32, Vec<u8>)>,
+    frames: Option<Vec<(u32, u32, Vec<u8>)>>,
 }
 struct ItemReady {
     id: String,
@@ -183,8 +183,10 @@ impl NativeCore {
 
     fn sprite(&self, looktype: Option<u64>) -> (Image, bool) {
         let Some(looktype) = looktype else { return (Image::default(), false) };
-        if let Some(image) = self.sprites.lock().get(&looktype) {
-            return (image.clone(), true);
+        if let Some(frames) = self.sprites.lock().get(&looktype) {
+            if let Some(image) = frames.first() {
+                return (image.clone(), true);
+            }
         }
         if !self.pending_sprites.lock().insert(looktype) {
             return (Image::default(), false);
@@ -195,19 +197,57 @@ impl NativeCore {
             let pixels = async {
                 let sprite = asset_service.pokemon_sprite(vec![looktype]).await.ok()??;
                 let file = asset_service.resolve_asset(sprite.asset_path).await.ok()?;
-                // Crop only the first idle sprite frame from the original atlas.
-                // Decoding and cropping happen off the GUI thread.
+                // Crop each genuine manifest frame from the original atlas
+                // off-thread. Slint displays frames on demand without polling
+                // the asset service on every animation tick.
                 let bitmap = image::open(file.path).ok()?;
-                if sprite.x.checked_add(sprite.width)? > bitmap.width()
-                    || sprite.y.checked_add(sprite.height)? > bitmap.height() {
-                    return None;
+                let mut coords = sprite.frames;
+                if coords.is_empty() {
+                    coords.push([sprite.x, sprite.y, sprite.width, sprite.height]);
                 }
-                let rgba = bitmap.crop_imm(sprite.x, sprite.y, sprite.width, sprite.height).to_rgba8();
-                Some((rgba.width(), rgba.height(), rgba.into_raw()))
+                let frames = coords.into_iter().filter_map(|[x, y, w, h]| {
+                    if x.checked_add(w)? > bitmap.width()
+                        || y.checked_add(h)? > bitmap.height() || w == 0 || h == 0 {
+                        return None;
+                    }
+                    let rgba = bitmap.crop_imm(x, y, w, h).to_rgba8();
+                    Some((rgba.width(), rgba.height(), rgba.into_raw()))
+                }).collect::<Vec<_>>();
+                (!frames.is_empty()).then_some(frames)
             }.await;
-            let _ = output.send(SpriteReady { looktype, pixels });
+            let _ = output.send(SpriteReady { looktype, frames: pixels });
         });
         (Image::default(), false)
+    }
+
+    fn sprite_frames(&self, looktype: Option<u64>) -> ModelRc<Image> {
+        // Calling sprite initiates a single asynchronous atlas fetch.
+        let _ = self.sprite(looktype);
+        model(looktype.and_then(|id| self.sprites.lock().get(&id).cloned())
+            .unwrap_or_default())
+    }
+
+    fn session_drop_art(&self, name: &str) -> (Image, bool) {
+        let catalog = self.item_catalog.lock().clone();
+        let lookup = catalog.as_ref().and_then(|catalog| {
+            let key = name.trim().to_lowercase();
+            catalog.items.iter()
+                .find(|(id, item)| {
+                    id.as_str() == name || item.name.to_lowercase() == key
+                        || item.name.to_lowercase().contains(&key)
+                })
+                .map(|(id, _)| id.clone())
+        }).unwrap_or_else(|| {
+            let normalized = name.to_lowercase();
+            if normalized.contains("chave") || normalized.contains("key") {
+                "70011".into()
+            } else if normalized.contains("shiny stone") {
+                "70012".into()
+            } else if normalized.contains("bicicleta") || normalized.contains("bicycle") {
+                "70013".into()
+            } else { name.to_owned() }
+        });
+        self.item_artwork(&lookup, &lookup)
     }
 
     fn start_item_catalog(&self) {
@@ -265,9 +305,12 @@ impl NativeCore {
     fn absorb_sprites(&self) {
         let receiver = self.sprite_rx.lock();
         while let Ok(sprite) = receiver.try_recv() {
-            if let Some((width, height, pixels)) = sprite.pixels {
-                let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, width, height);
-                self.sprites.lock().insert(sprite.looktype, Image::from_rgba8(buffer));
+            if let Some(frames) = sprite.frames {
+                let images = frames.into_iter().map(|(width, height, pixels)| {
+                    let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, width, height);
+                    Image::from_rgba8(buffer)
+                }).collect::<Vec<_>>();
+                self.sprites.lock().insert(sprite.looktype, images);
                 self.asset_generation.fetch_add(1, Ordering::AcqRel);
             }
             // Do not repeatedly fetch a non-existent looktype each UI poll.
@@ -425,6 +468,9 @@ impl NativeCore {
                 bonus_twitch: twitch_bonus > 0.0,
                 bonus_event: event_bonus > 0.0,
                 pokemon_art: self.sprite(pokemon.and_then(|p| p.look_shiny.or(p.looktype))).0,
+                pokemon_frames: self.sprite_frames(pokemon.and_then(|p| p.look_shiny.or(p.looktype))),
+                twitch_bonus: if online { format!("Twitch XP +{twitch_bonus:.1}%") }
+                    else { "Twitch: sem leitura".into() }.into(),
                 has_pokemon_art: pokemon.and_then(|p| p.look_shiny.or(p.looktype))
                     .is_some_and(|id| self.sprites.lock().contains_key(&id)),
                 hp: hp.into(),
@@ -480,6 +526,7 @@ impl NativeCore {
         let selected_looktype = snapshot.and_then(|s| s.state.active_pokemon.as_ref())
             .and_then(|p| p.look_shiny.or(p.looktype));
         ui.set_current_pokemon_art(self.sprite(selected_looktype).0);
+        ui.set_current_pokemon_frames(self.sprite_frames(selected_looktype));
         let ivs = snapshot.and_then(|live| live.state.active_pokemon.as_ref())
             .and_then(|poke| poke.ivs.as_ref());
         let iv_label = |value: Option<u64>| value
@@ -555,9 +602,13 @@ impl NativeCore {
             .unwrap_or_default()).into());
         ui.set_session_drops(model(session.map(|s| s.drops.iter()
             .filter(|(_, qty)| **qty > 0)
-            .map(|(label, qty)| SessionDropRow {
-                label: label.clone().into(),
-                quantity: format_num(*qty).into(),
+            .map(|(label, qty)| {
+                let (artwork, has_artwork) = self.session_drop_art(label);
+                SessionDropRow {
+                    label: label.clone().into(),
+                    quantity: format_num(*qty).into(),
+                    artwork, has_artwork,
+                }
             }).collect()).unwrap_or_default()));
 
 
@@ -863,6 +914,12 @@ impl NativeCore {
                     let (artwork, has_artwork) =
                         self.sprite(pokemon.look_shiny.or(pokemon.looktype));
                     rows.push(InventoryRow {
+                        frames: self.sprite_frames(pokemon.look_shiny.or(pokemon.looktype)),
+                        iv_total: pokemon.iv_total.map(|x| x.to_string()).unwrap_or_else(|| "—".into()).into(),
+                        note: pokemon.note.map(|x| format!("{x:.2}")).unwrap_or_else(|| "—".into()).into(),
+                        power: pokemon.power.map(|x| format!("P{x}")).unwrap_or_else(|| "—".into()).into(),
+                        quality: pokemon.quality.map(|x| format!("{x:.2}")).unwrap_or_else(|| "—".into()).into(),
+                        shiny: pokemon.shiny,
                         id: format!("{}:{}", account_id, pokemon.id).into(),
                         owner: owner.into(),
                         title: title.into(),
@@ -916,6 +973,9 @@ impl NativeCore {
                         format!("{}  •  {}", category, owner_label)
                     } else { String::new() };
                     rows.push(InventoryRow {
+                        frames: model(Vec::<Image>::new()),
+                        iv_total: "".into(), note: "".into(), power: "".into(),
+                        quality: "".into(), shiny: false,
                         id: item_id.into(),
                         owner: owner_label.into(),
                         title: name.into(),
