@@ -365,6 +365,7 @@ impl NativeCore {
         let mut total_gold_rate = 0_u64;
         let mut total_gold = 0_u64;
         let mut total_gems = 0_u64;
+        let mut connect_next_available = false;
         for (index, profile) in self.profiles.iter().enumerate() {
             let snapshot = lives.iter().find(|s| s.account.id == profile.id());
             let state = self.login[index].lock();
@@ -373,6 +374,7 @@ impl NativeCore {
                     && s.account.status == ConnectionStatus::Online
             });
             if online { online_count += 1; }
+            else if !state.busy { connect_next_available = true; }
             if let Some(s) = snapshot {
                 if online {
                     total_xp = total_xp.saturating_add(s.metrics.xp_per_hour);
@@ -387,6 +389,18 @@ impl NativeCore {
                 if p.max_hp == 0 { "—".to_string() }
                 else { format!("{}%", p.hp.saturating_mul(100)/p.max_hp) }
             }).unwrap_or_else(|| "—".into());
+            let bonus = snapshot.map(|s| &s.state.xp_bonus);
+            let vip_active = snapshot.and_then(|s| s.state.vip_active).unwrap_or(false);
+            let guild_bonus = bonus.and_then(|b| b.guild_rank_pct).unwrap_or(0.0);
+            let guild_boost = bonus.and_then(|b| b.guild_boost_active).unwrap_or(false);
+            let twitch_bonus = bonus.and_then(|b| b.twitch_pct).unwrap_or(0.0);
+            let event_bonus = bonus.and_then(|b| b.event_trainer_pct).unwrap_or(0.0);
+            let multiplier = (if vip_active { 1.5 } else { 1.0 })
+                * (1.0 + guild_bonus.max(0.0) / 100.0)
+                * (if guild_boost { 1.1 } else { 1.0 })
+                * (1.0 + twitch_bonus.max(0.0) / 100.0)
+                * (1.0 + event_bonus.max(0.0) / 100.0);
+            let bonus_label = format!("XP +{:.1}%", (multiplier - 1.0) * 100.0);
             rows.push(AccountRow {
                 id: profile.id().into(),
                 name: snapshot.map(|s| s.account.local_alias.as_deref().unwrap_or(&s.account.nick))
@@ -399,6 +413,17 @@ impl NativeCore {
                 level: format!("Nv. {}", snapshot.and_then(|s| s.state.level)
                     .map(|n| n.to_string()).unwrap_or_else(|| "—".into())).into(),
                 pokemon: pokemon.map(|p| p.name.as_str()).unwrap_or("—").into(),
+                pokemon_level: pokemon.map(|p| format!("Nv. {}", p.level))
+                    .unwrap_or_else(|| "—".into()).into(),
+                hp_percent: pokemon.filter(|p| p.max_hp > 0)
+                    .map(|p| p.hp.saturating_mul(100).checked_div(p.max_hp).unwrap_or(0).min(100) as i32)
+                    .unwrap_or(0),
+                bonus_label: bonus_label.into(),
+                bonus_vip: vip_active,
+                bonus_guild: guild_bonus > 0.0,
+                bonus_guild_boost: guild_boost,
+                bonus_twitch: twitch_bonus > 0.0,
+                bonus_event: event_bonus > 0.0,
                 pokemon_art: self.sprite(pokemon.and_then(|p| p.look_shiny.or(p.looktype))).0,
                 has_pokemon_art: pokemon.and_then(|p| p.look_shiny.or(p.looktype))
                     .is_some_and(|id| self.sprites.lock().contains_key(&id)),
@@ -431,6 +456,7 @@ impl NativeCore {
                 }).unwrap_or_else(|| "—".into()).into(),
             });
         }
+        ui.set_connect_next_available(connect_next_available);
         ui.set_accounts(model(rows));
         ui.set_total_xp(format_num(total_xp).into());
         ui.set_total_gold_rate(format_num(total_gold_rate).into());
@@ -1136,6 +1162,19 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
                     ui.set_status_line("Preferências nativas salvas".into());
                 }
                 Err(error) => ui.set_status_line(format!("Erro ao salvar: {error}").into()),
+            }
+        }
+    });
+    let next_core = core.clone();
+    ui.on_connect_next_account(move || {
+        let snapshots = next_core.accounts.live_snapshots();
+        for (index, profile) in next_core.profiles.iter().enumerate() {
+            let online = snapshots.iter().any(|s| s.account.id == profile.id()
+                && s.account.status == ConnectionStatus::Online
+                && s.account.owner == ConnectionOwner::Background);
+            if !online && !next_core.login[index].lock().busy {
+                next_core.login(index);
+                return;
             }
         }
     });

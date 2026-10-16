@@ -207,3 +207,13 @@ filters, pause/resume display, clear, and click-to-copy sanitized payloads.
 Disabling developer mode clears captured frames and stops collecting them;
 no raw authentication frames are stored on disk. The inspector remains
 opt-in so the regular live transport does not pay for frame capture.
+
+## React Dashboard visual parity
+
+The Dashboard follows the original desktop navigation order and positions
+Resumo/Sessão plus the next-account Connect action in the illustrated page
+header. Account cards follow the original two-column layout, wood-framed
+profile header, genuine game sprite, Pokémon level, HP meter and a 2×2
+XP/Gold/Potion/Ball metrics section. Bonus badges show the **known game
+multipliers**, not an invented total. The Session toggle displays its own
+statistics, and an offline profile can still be started from its card.
