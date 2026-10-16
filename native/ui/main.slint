@@ -1845,12 +1845,7 @@ export component ManagerWindow inherits Window {
                                             label: root.sniper-picker-open ? "Fechar busca" : "Procurar";
                                             clicked => { root.sniper-picker-open = !root.sniper-picker-open; }
                                         }
-                                        Text {
-                                            text: root.sniper-item-id != "" ? "ID " + root.sniper-item-id : "Selecione um item";
-                                            color: root.sniper-item-id != "" ? #b4dfad : #ddb59e;
-                                            font-size: 12px;
-                                            vertical-alignment: center;
-                                        }
+                                        LineEdit { text <=> root.sniper-item-id; width: 105px; placeholder-text: "ID do item"; }
                                     }
                                     if root.sniper-picker-open : ListView {
                                         height: 115px;
