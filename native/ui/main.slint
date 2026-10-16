@@ -1360,7 +1360,16 @@ export component ManagerWindow inherits Window {
 
                         if !root.showing-detail && root.page == 3 : VerticalLayout {
                             spacing: 13px;
-                            SectionHeading { label: "Bag e Depot"; }
+                            HorizontalLayout {
+                                SectionHeading { label: "Bag e Depot"; }
+                                Text {
+                                    text: root.inventory-count + " resultados";
+                                    color: #dab99c;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: right;
+                                }
+                            }
                             HorizontalLayout {
                                 WoodButton {
                                     label: "Todas as contas";
@@ -1461,7 +1470,7 @@ export component ManagerWindow inherits Window {
                                     spacing: 11px;
                                     flex-wrap: wrap;
                                     for entry in root.inventory : Rectangle {
-                                        width: 168px; height: 162px;
+                                        width: 185px; height: 180px;
                                         border-width: 2px;
                                         border-color: #995b46;
                                         border-radius: 9px;
@@ -1469,7 +1478,7 @@ export component ManagerWindow inherits Window {
                                         VerticalLayout {
                                             padding: 9px; spacing: 6px;
                                             Rectangle {
-                                                width: 70px; height: 70px;
+                                                width: 80px; height: 80px;
                                                 background: #282033;
                                                 border-radius: 5px;
                                                 if entry.has-artwork : Image {
@@ -1511,58 +1520,68 @@ export component ManagerWindow inherits Window {
                                 }
                             }
                             if root.inventory-tab == 2 : ListView {
-                                height: 500px;
+                                height: 580px;
                                 for group in root.inventory-grid : HorizontalLayout {
-                                    height: 243px;
-                                    spacing: 11px;
+                                    height: 317px;
+                                    spacing: 10px;
                                     for entry in group.cells : Rectangle {
-                                        width: 208px; height: 232px;
+                                        width: 239px; height: 305px;
                                         background: #3e2835;
                                         border-width: 2px;
-                                        border-color: entry.locked ? #7e7888 : #986044;
+                                        border-color: entry.shiny ? #d9aa58 : entry.locked ? #7e7888 : #986044;
                                         border-radius: 9px;
                                         VerticalLayout {
-                                            padding: 9px; spacing: 5px;
-                                            Text {
-                                                text: entry.owner;
-                                                color: #cbb3a4;
-                                                font-size: 12px;
-                                                font-weight: 720;
+                                            padding: 9px; spacing: 7px;
+                                            HorizontalLayout {
+                                                spacing: 6px;
+                                                Text { text: entry.owner; color: #cbb3a4; font-size: 12px; font-weight: 730; horizontal-stretch: 1; }
+                                                Text {
+                                                    text: entry.shiny ? "✦ SHINY" : entry.locked ? "◆ LOCK" : "DEPOT";
+                                                    color: entry.shiny ? #ffe083 : entry.locked ? #c3bccd : #99847e;
+                                                    font-size: 10px;
+                                                    font-weight: 780;
+                                                }
                                             }
                                             Rectangle {
-                                                height: 89px;
+                                                height: 107px;
                                                 background: #272330;
-                                                border-radius: 5px;
+                                                border-radius: 6px;
+                                                Image {
+                                                    source: @image-url("../../src/assets/pokeidle-theme/backgrounds/pokemon-battle-backdrop.png");
+                                                    width: parent.width; height: parent.height; image-fit: cover;
+                                                }
                                                 if entry.has-artwork : Image {
-                                                    source: entry.artwork;
-                                                    width: parent.width;
-                                                    height: parent.height;
+                                                    source: entry.frames.length > 0
+                                                        ? entry.frames[Math.mod(root.sprite-frame, entry.frames.length)]
+                                                        : entry.artwork;
+                                                    width: parent.width; height: parent.height;
                                                     image-fit: contain;
                                                 }
                                                 if !entry.has-artwork : Text {
-                                                    text: "◉";
-                                                    color: #ebc582;
-                                                    font-size: 31px;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
+                                                    text: "◉"; color: #ebc582; font-size: 31px;
+                                                    horizontal-alignment: center; vertical-alignment: center;
                                                 }
                                             }
                                             Text {
                                                 text: entry.title;
-                                                color: #ffedd2;
-                                                font-size: 13px;
-                                                font-weight: 750;
+                                                color: #ffedd2; font-size: 14px; font-weight: 760;
+                                                overflow: elide;
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 8px;
+                                                Text { text: entry.power; color: #d7b2f1; font-size: 12px; font-weight: 730; }
+                                                Text { text: "IV " + entry.iv-total; color: #b9e4ad; font-size: 12px; font-weight: 730; }
+                                                Text { text: "Q " + entry.quality; color: #ffd0ab; font-size: 12px; }
+                                                Text { text: "Nota " + entry.note; color: #f5ce84; font-size: 12px; }
                                             }
                                             Text {
-                                                text: entry.details;
-                                                color: #cbb7a6;
-                                                font-size: 11px;
-                                                wrap: word-wrap;
+                                                text: entry.details; color: #bca79f; font-size: 11px;
+                                                max-width: 214px; overflow: elide;
                                             }
                                             WoodButton {
-                                                label: entry.locked ? "Protegido" : "Vender";
+                                                label: entry.locked ? "Protegido pelo jogo" : "Vender Pokémon";
                                                 enabled: !entry.locked;
-                                                height: 31px;
+                                                height: 32px;
                                                 clicked => {
                                                     root.sale-id = entry.id;
                                                     root.sale-name = entry.title + " — " + entry.owner;
@@ -1668,6 +1687,16 @@ export component ManagerWindow inherits Window {
                                         Text { text: entry.quantity; width: 92px; color: #d0b0a3; }
                                         Text { text: entry.gold; width: 102px; color: #ffcd77; }
                                         Text { text: entry.orbs; width: 102px; color: #d7b8ea; }
+                                        WoodButton {
+                                            label: "Regra";
+                                            height: 30px;
+                                            clicked => {
+                                                root.sniper-editing-id = "";
+                                                root.sniper-item-id = entry.id;
+                                                root.sniper-item-search = entry.name;
+                                                root.sniper-picker-open = false;
+                                            }
+                                        }
                                     }
                                 }
                             }
