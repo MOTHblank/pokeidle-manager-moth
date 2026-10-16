@@ -344,6 +344,74 @@ impl NativeCore {
         ui.set_current_xp(format_num(snapshot.and_then(|s| s.state.xp).unwrap_or_default()).into());
         ui.set_current_gold(format_num(snapshot.and_then(|s| s.state.gold).unwrap_or_default()).into());
 
+        ui.set_current_orbs(format_num(snapshot.and_then(|s| s.state.orbs).unwrap_or_default()).into());
+        ui.set_current_diamonds(format_num(snapshot.and_then(|s| s.state.diamonds).unwrap_or_default()).into());
+        let is_vip = snapshot.and_then(|s| s.state.vip_active).unwrap_or(false);
+        ui.set_current_vip((if is_vip { "VIP ativo" } else { "VIP inativo" }).into());
+        let active = snapshot.and_then(|s| s.state.active_pokemon.as_ref());
+        ui.set_current_pokemon_level(active.map(|p| format_num(p.level as u64))
+            .unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_types(active.map(|p| p.types.join(" / "))
+            .unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_hp(active.map(|p| {
+            format!("{} / {}  ({}%)",
+                format_num(p.hp), format_num(p.max_hp),
+                if p.max_hp > 0 { p.hp.saturating_mul(100) / p.max_hp } else { 0 })
+        }).unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_xp(active.map(|p| format_num(p.xp.unwrap_or_default()))
+            .unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_quality(active.and_then(|p| p.quality)
+            .map(|v| format!("{v:.3}")).unwrap_or_else(|| "—".into()).into());
+        ui.set_current_pokemon_power(active.and_then(|p| p.potencia)
+            .map(|v| format!("P{v}")).unwrap_or_else(|| "—".into()).into());
+        let wild = snapshot.and_then(|s| s.state.wild.as_ref());
+        ui.set_current_wild(wild.map(|w| format!("{} · Nv. {}", w.name, w.level))
+            .unwrap_or_else(|| "Nenhum encontro ativo".into()).into());
+        ui.set_current_wild_hp(wild.map(|w| format!("{} / {}", format_num(w.hp), format_num(w.max_hp)))
+            .unwrap_or_else(|| "—".into()).into());
+        ui.set_current_xp_rate(format_num(snapshot.map(|s| s.metrics.xp_per_hour)
+            .unwrap_or_default()).into());
+        ui.set_current_gold_rate(format_num(snapshot.map(|s| s.metrics.gold_per_hour)
+            .unwrap_or_default()).into());
+        ui.set_current_kills(format_num(snapshot.map(|s| s.metrics.kills)
+            .unwrap_or_default()).into());
+        ui.set_current_captures(format_num(snapshot.map(|s| s.metrics.captures)
+            .unwrap_or_default()).into());
+        ui.set_current_potion_rate(format_num(snapshot.and_then(|s| s.metrics.potions_per_hour)
+            .unwrap_or_default()).into());
+        ui.set_current_balls_used(format_num(snapshot.map(|s|
+            s.metrics.balls_used.values().copied().sum()).unwrap_or_default()).into());
+        let session = snapshot.and_then(|s| s.state.hunt_session.as_ref());
+        let session_time = session.map(|session| {
+            let now = SystemTime::now().duration_since(UNIX_EPOCH)
+                .unwrap_or_default().as_millis() as u64;
+            let seconds = now.saturating_sub(session.started_at_ms) / 1_000;
+            format!("{:02}h {:02}m {:02}s",
+                seconds / 3600, (seconds / 60) % 60, seconds % 60)
+        }).unwrap_or_else(|| "—".into());
+        ui.set_current_session_time(session_time.into());
+        ui.set_current_session_trainer_xp(format_num(session.map(|s| s.trainer_xp)
+            .unwrap_or_default()).into());
+        ui.set_current_session_pokemon_xp(format_num(session.map(|s| s.pokemon_xp)
+            .unwrap_or_default()).into());
+        ui.set_current_session_gold(format_num(session.map(|s|
+            s.gold_combat.saturating_add(s.gold_auto_sale)).unwrap_or_default()).into());
+        ui.set_current_session_kills(format_num(session.map(|s| s.kills)
+            .unwrap_or_default()).into());
+        ui.set_current_session_captures(format_num(session.map(|s| s.captures)
+            .unwrap_or_default()).into());
+        ui.set_current_shiny_seen(format_num(session.map(|s| s.shinies_seen)
+            .unwrap_or_default()).into());
+        ui.set_current_shiny_captured(format_num(session.map(|s| s.shinies_captured)
+            .unwrap_or_default()).into());
+        ui.set_session_drops(model(session.map(|s| s.drops.iter()
+            .filter(|(_, qty)| **qty > 0)
+            .map(|(label, qty)| SessionDropRow {
+                label: label.clone().into(),
+                quantity: format_num(*qty).into(),
+            }).collect()).unwrap_or_default()));
+
+
         let login = self.login[index].lock();
         ui.set_status_line(login.message.clone().into());
         drop(login);

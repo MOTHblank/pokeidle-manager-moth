@@ -59,6 +59,10 @@ export struct MarketRow {
     gold: string,
     orbs: string,
 }
+export struct SessionDropRow {
+    label: string,
+    quantity: string,
+}
 export struct SniperRuleRow {
     id: string,
     label: string,
@@ -396,6 +400,33 @@ export component ManagerWindow inherits Window {
     in-out property <string> current-pokemon: "—";
     in-out property <image> current-pokemon-art;
     in-out property <string> current-status: "Offline";
+    in-out property <string> current-orbs: "0";
+    in-out property <string> current-diamonds: "0";
+    in-out property <string> current-vip: "—";
+    in-out property <string> current-pokemon-level: "—";
+    in-out property <string> current-pokemon-types: "—";
+    in-out property <string> current-pokemon-hp: "—";
+    in-out property <string> current-pokemon-xp: "—";
+    in-out property <string> current-pokemon-quality: "—";
+    in-out property <string> current-pokemon-power: "—";
+    in-out property <string> current-wild: "Nenhum encontro ativo";
+    in-out property <string> current-wild-hp: "—";
+    in-out property <string> current-xp-rate: "0";
+    in-out property <string> current-gold-rate: "0";
+    in-out property <string> current-kills: "0";
+    in-out property <string> current-captures: "0";
+    in-out property <string> current-potion-rate: "0";
+    in-out property <string> current-balls-used: "0";
+    in-out property <string> current-session-time: "—";
+    in-out property <string> current-session-trainer-xp: "0";
+    in-out property <string> current-session-pokemon-xp: "0";
+    in-out property <string> current-session-gold: "0";
+    in-out property <string> current-session-kills: "0";
+    in-out property <string> current-session-captures: "0";
+    in-out property <string> current-shiny-seen: "0";
+    in-out property <string> current-shiny-captured: "0";
+    in-out property <[SessionDropRow]> session-drops: [];
+    in-out property <bool> confirm-reset-session: false;
     in-out property <bool> auto-potion: false;
     in-out property <bool> auto-revive: false;
     in-out property <bool> auto-return: false;
@@ -502,39 +533,283 @@ export component ManagerWindow inherits Window {
                         if root.showing-detail : VerticalLayout {
                             spacing: 13px;
                             HorizontalLayout {
-                                WoodButton { label: "← Dashboard"; clicked => { root.showing-detail = false; root.page = 0; } }
-                                Text { text: root.current-status; color: #a7e5b9; vertical-alignment: center; }
+                                WoodButton {
+                                    label: "← Voltar ao Dashboard";
+                                    clicked => { root.showing-detail = false; root.page = 0; }
+                                }
+                                Text {
+                                    text: root.current-status;
+                                    color: #a7e5b9;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: root.current-vip;
+                                    color: #f4ce77;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: right;
+                                }
                             }
                             SectionHeading { label: root.current-account + "  •  " + root.current-level; }
-                            Rectangle {
-                                height: 155px; background: #392430; border-width: 2px; border-color: #986044; border-radius: 10px;
-                                HorizontalLayout {
-                                    padding: 16px; spacing: 20px;
-                                    Rectangle {
-                                        width: 155px;
-                                        height: 125px;
-                                        Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/pokemon-battle-backdrop.png"); width: parent.width; height: parent.height; image-fit: cover; }
-                                        Image { source: root.current-pokemon-art; width: parent.width; height: parent.height; image-fit: contain; }
-                                    }
+                            FlexboxLayout {
+                                spacing: 14px;
+                                flex-wrap: wrap;
+                                Rectangle {
+                                    width: 350px; height: 273px;
+                                    background: #422934; border-radius: 9px;
+                                    border-color: #986044; border-width: 2px;
                                     VerticalLayout {
-                                        spacing: 10px;
-                                        Text { text: root.current-pokemon; color: #fff0c7; font-size: 23px; font-weight: 700; }
-                                        Text { text: root.current-hunt; color: #e0b495; }
-                                        Text { text: "XP " + root.current-xp + "     Gold " + root.current-gold; color: #e8d2c1; }
+                                        padding: 11px; spacing: 5px;
+                                        SectionHeading { label: "Informações da conta"; }
+                                        DisplayRow {
+                                            heading: "Nível do treinador";
+                                            subheading: "Nível da conta";
+                                            value: root.current-level;
+                                        }
+                                        DisplayRow {
+                                            heading: "Gold / Gemas";
+                                            subheading: "Saldos disponíveis";
+                                            value: root.current-gold + " / " + root.current-orbs;
+                                        }
+                                        DisplayRow {
+                                            heading: "Diamantes";
+                                            subheading: "Saldo especial";
+                                            value: root.current-diamonds;
+                                        }
+                                        Text {
+                                            text: "Caçando: " + root.current-hunt;
+                                            color: #f1d0ae;
+                                            font-size: 13px;
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 350px; height: 273px;
+                                    background: #422934; border-radius: 9px;
+                                    border-color: #986044; border-width: 2px;
+                                    VerticalLayout {
+                                        padding: 11px; spacing: 7px;
+                                        SectionHeading { label: "Pokémon ativo"; }
+                                        HorizontalLayout {
+                                            spacing: 12px;
+                                            Rectangle {
+                                                width: 137px; height: 131px;
+                                                background: #282033;
+                                                border-radius: 6px;
+                                                Image {
+                                                    source: @image-url("../../src/assets/pokeidle-theme/backgrounds/pokemon-battle-backdrop.png");
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    image-fit: cover;
+                                                }
+                                                Image {
+                                                    source: root.current-pokemon-art;
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    image-fit: contain;
+                                                }
+                                            }
+                                            VerticalLayout {
+                                                spacing: 7px;
+                                                Text {
+                                                    text: root.current-pokemon;
+                                                    color: #fff0cd;
+                                                    font-size: 20px;
+                                                    font-weight: 760;
+                                                }
+                                                Text {
+                                                    text: "Nv. " + root.current-pokemon-level;
+                                                    color: #ecd2bd;
+                                                }
+                                                Text {
+                                                    text: root.current-pokemon-types;
+                                                    color: #abdda9;
+                                                    font-size: 12px;
+                                                }
+                                                Text {
+                                                    text: "Potência " + root.current-pokemon-power;
+                                                    color: #f3c18c;
+                                                }
+                                                Text {
+                                                    text: "Qualidade " + root.current-pokemon-quality;
+                                                    color: #ead1b7;
+                                                }
+                                            }
+                                        }
+                                        DisplayRow {
+                                            heading: "HP";
+                                            subheading: "Saúde do Pokémon";
+                                            value: root.current-pokemon-hp;
+                                        }
+                                        Text {
+                                            text: "XP " + root.current-pokemon-xp;
+                                            color: #b2e8c2;
+                                            font-size: 12px;
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 350px; height: 273px;
+                                    background: #422934; border-radius: 9px;
+                                    border-color: #986044; border-width: 2px;
+                                    VerticalLayout {
+                                        padding: 11px; spacing: 7px;
+                                        SectionHeading { label: "Selvagem e farm"; }
+                                        Text {
+                                            text: root.current-wild;
+                                            color: #fff0db;
+                                            font-size: 18px;
+                                            font-weight: 750;
+                                        }
+                                        DisplayRow {
+                                            heading: "HP selvagem";
+                                            subheading: "Encontro atual";
+                                            value: root.current-wild-hp;
+                                        }
+                                        DisplayRow {
+                                            heading: "Kills";
+                                            subheading: "Total de combate";
+                                            value: root.current-kills;
+                                        }
+                                        DisplayRow {
+                                            heading: "Capturas";
+                                            subheading: "Pokémon capturados";
+                                            value: root.current-captures;
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 350px; height: 250px;
+                                    background: #422934; border-radius: 9px;
+                                    border-color: #986044; border-width: 2px;
+                                    VerticalLayout {
+                                        padding: 11px; spacing: 7px;
+                                        SectionHeading { label: "Métricas da hunt"; }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            MetricTile {
+                                                title: "XP/h";
+                                                value: root.current-xp-rate;
+                                                artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-level.png");
+                                            }
+                                            MetricTile {
+                                                title: "Gold/h";
+                                                value: root.current-gold-rate;
+                                                artwork: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-gold.png");
+                                            }
+                                        }
+                                        Text {
+                                            text: "Poções/h  " + root.current-potion-rate +
+                                                "    Balls usadas  " + root.current-balls-used;
+                                            color: #debea7;
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 350px; height: 250px;
+                                    background: #422934; border-radius: 9px;
+                                    border-color: #986044; border-width: 2px;
+                                    VerticalLayout {
+                                        padding: 11px; spacing: 7px;
+                                        SectionHeading { label: "Automações"; }
+                                        for automation in root.automations : HorizontalLayout {
+                                            height: 27px;
+                                            Text {
+                                                text: automation.label;
+                                                color: #f2dfcf;
+                                                font-size: 13px;
+                                            }
+                                            Text {
+                                                text: automation.enabled ? "Ativa" : "Desativada";
+                                                color: automation.enabled ? #a5e7be : #ad9d9b;
+                                                horizontal-alignment: right;
+                                                font-size: 12px;
+                                            }
+                                        }
+                                        WoodButton {
+                                            label: "Configurar automações";
+                                            clicked => {
+                                                root.page = 2;
+                                                root.showing-detail = false;
+                                                root.route-changed(2);
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 350px; height: 250px;
+                                    background: #422934; border-radius: 9px;
+                                    border-color: #986044; border-width: 2px;
+                                    VerticalLayout {
+                                        padding: 11px; spacing: 5px;
+                                        HorizontalLayout {
+                                            SectionHeading { label: "Estatísticas da sessão"; }
+                                            Text {
+                                                text: root.current-session-time;
+                                                color: #d5bcaa;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                        Text {
+                                            text: "Trainer XP " + root.current-session-trainer-xp +
+                                                "    Pokémon XP " + root.current-session-pokemon-xp;
+                                            color: #b3e9be;
+                                        }
+                                        Text {
+                                            text: "Gold " + root.current-session-gold +
+                                                "    Kills " + root.current-session-kills;
+                                            color: #f2d1a5;
+                                        }
+                                        Text {
+                                            text: "Capturas " + root.current-session-captures +
+                                                "    Shinies vistos " + root.current-shiny-seen +
+                                                " / capturados " + root.current-shiny-captured;
+                                            color: #eac7cf;
+                                            font-size: 12px;
+                                            wrap: word-wrap;
+                                        }
+                                        if !root.confirm-reset-session : WoodButton {
+                                            label: "Resetar sessão";
+                                            clicked => { root.confirm-reset-session = true; }
+                                        }
+                                        if root.confirm-reset-session : HorizontalLayout {
+                                            WoodButton {
+                                                label: "Confirmar reset";
+                                                clicked => {
+                                                    root.reset-session();
+                                                    root.confirm-reset-session = false;
+                                                }
+                                            }
+                                            WoodButton {
+                                                label: "Cancelar";
+                                                clicked => { root.confirm-reset-session = false; }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            SectionHeading { label: "Drops da sessão"; }
+                            FlexboxLayout {
+                                spacing: 8px;
+                                flex-wrap: wrap;
+                                for drop in root.session-drops : Rectangle {
+                                    width: 176px;
+                                    height: 58px;
+                                    background: #3e2734;
+                                    border-width: 1px;
+                                    border-color: #88553c;
+                                    border-radius: 6px;
+                                    VerticalLayout {
+                                        padding: 7px;
+                                        Text { text: drop.label; color: #e9cdb7; font-size: 12px; }
+                                        Text { text: drop.quantity; color: #ffca78; font-weight: 750; }
                                     }
                                 }
                             }
                             HorizontalLayout {
                                 WoodButton { label: "Centro Pokémon"; clicked => { root.return-center(); } }
                                 WoodButton { label: "Onde Caçar"; clicked => { root.page = 1; root.showing-detail = false; root.route-changed(1); } }
-                                WoodButton { label: "Automações"; clicked => { root.page = 2; root.showing-detail = false; root.route-changed(2); } }
-                                WoodButton { label: "Reset sessão"; clicked => { root.reset-session(); } }
+                                WoodButton { label: "Inventários"; clicked => { root.page = 3; root.showing-detail = false; root.route-changed(3); } }
                             }
-                            SectionHeading { label: "Conta e sessão"; }
-                            DisplayRow { heading: "Hunt atual"; subheading: "Confirmada pelo servidor"; value: root.current-hunt; }
-                            DisplayRow { heading: "Nível"; subheading: "Treinador"; value: root.current-level; }
-                            DisplayRow { heading: "XP acumulado"; subheading: "Progresso do treinador"; value: root.current-xp; }
-                            DisplayRow { heading: "Gold"; subheading: "Saldo atual"; value: root.current-gold; }
                         }
 
                         if !root.showing-detail && root.page == 0 : VerticalLayout {
@@ -682,7 +957,7 @@ export component ManagerWindow inherits Window {
                                         root.pokemon-sort == 3 ? "IV ↓" :
                                         root.pokemon-sort == 4 ? "Nota ↓" :
                                         "Recentes ↓";
-                                    clicked => { root.pokemon-sort = (root.pokemon-sort + 1) % 6; }
+                                    clicked => { root.pokemon-sort = Math.mod(root.pokemon-sort + 1, 6); }
                                 }
                                 WoodButton {
                                     label: "Vender Depot";
