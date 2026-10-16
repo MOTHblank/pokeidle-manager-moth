@@ -608,6 +608,59 @@ impl NativeCore {
             let names: std::collections::HashMap<_,_> = market.item_metadata.iter()
                 .map(|m| (m.item_id, m.name.as_str())).collect();
             ui.set_market_status(market.reader_status.into());
+            let history_note = if !market.transaction_history_confirmed {
+                format!("Histórico ainda não confirmado pelo jogo: {}", market.history_status)
+            } else if market.purchase_history_truncated {
+                format!("Histórico parcial: {} • registros de compras locais limitados", market.history_status)
+            } else {
+                format!("Histórico confirmado pelo jogo: {}", market.history_status)
+            };
+            ui.set_market_history_status(history_note.into());
+            ui.set_market_history(model(market.recent_transactions.iter()
+                .map(|entry| MarketHistoryRow {
+                    date: format_event_time(entry.occurred_at).into(),
+                    item: entry.item_name.clone()
+                        .unwrap_or_else(|| entry.description.clone()).into(),
+                    participants: format!("{}  →  {}", entry.seller, entry.buyer).into(),
+                    amount: format_num(entry.total).into(),
+                    currency: if entry.currency == market::MarketCurrency::Gold {
+                        "Gold".into()
+                    } else { "Gemas".into() },
+                }).collect()));
+            ui.set_market_top_sales(model(market.top_item_sales.iter()
+                .map(|entry| MarketTopRow {
+                    item: entry.item_name.clone().into(),
+                    count: format_num(entry.transactions).into(),
+                    quantity: format_num(entry.quantity).into(),
+                    average: match (entry.average_unit_price, entry.currency.as_ref()) {
+                        (Some(value), Some(market::MarketCurrency::Gold)) =>
+                            format!("{} gold/un", format_num(value)),
+                        (Some(value), Some(market::MarketCurrency::Orb)) =>
+                            format!("{} gemas/un", format_num(value)),
+                        _ => {
+                            let gold = entry.average_gold_unit_price
+                                .map(format_num).unwrap_or_else(|| "—".into());
+                            let orb = entry.average_orb_unit_price
+                                .map(format_num).unwrap_or_else(|| "—".into());
+                            format!("Gold {gold} / Gemas {orb}")
+                        }
+                    }.into(),
+                }).collect()));
+            ui.set_market_purchases(model(market.purchases.iter()
+                .filter(|entry| entry.account_id == id)
+                .map(|entry| MarketPurchaseRow {
+                    item: entry.description.clone().into(),
+                    outcome: if entry.outcome == "purchased" {
+                        "Compra confirmada pelo servidor".into()
+                    } else {
+                        "Oferta sem compra confirmada".into()
+                    },
+                    quantity: format_num(entry.quantity).into(),
+                    cost: format_num(entry.total).into(),
+                    currency: if entry.currency == market::MarketCurrency::Gold {
+                        "Gold".into()
+                    } else { "Gemas".into() },
+                }).collect()));
             ui.set_sniper_rules(model(market.rules.iter()
                 .filter(|rule| rule.account_id == id)
                 .map(|rule| SniperRuleRow {
@@ -650,6 +703,18 @@ impl NativeCore {
             ui.set_lives(model(twitch.chain(kick).collect()));
         }
     }
+}
+
+fn format_event_time(unix: u64) -> String {
+    // Game logs use Unix milliseconds. Keep seconds compatibility for
+    // older receipts without losing their calendar date.
+    let millis = if unix < 100_000_000_000 { unix.saturating_mul(1_000) }
+                 else { unix };
+    let Some(value) = i64::try_from(millis).ok()
+        .and_then(chrono::DateTime::<chrono::Utc>::from_timestamp_millis)
+    else { return "Data indisponível".into(); };
+    value.with_timezone(&chrono::Local)
+        .format("%d/%m/%Y %H:%M").to_string()
 }
 
 fn format_num(number: u64) -> String {
