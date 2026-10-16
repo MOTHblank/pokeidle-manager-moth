@@ -78,8 +78,8 @@ comparison throughout the work.
 The Slint port is **not yet visually pixel-identical or feature-complete**
 with the original React Manager. Outstanding work includes full animated
 Pokémon sprite sequences, rare-drop artwork, detailed original panel
-geometry and typography, a richer Pokémon rating panel, a complete
-developer protocol inspector, fully automatic native Twitch authorization
+geometry and typography, a richer Pokémon rating panel, the complete
+React developer protocol inspector, fully automatic native Twitch authorization
 and proof of server-side viewing bonus eligibility, and a tested native
 Windows installer/update channel. Hunt predictions remain forecasts
 rather than fully trace-validated measured combat rates.
@@ -196,3 +196,14 @@ is triggered only for an explicit `native-v*` tag and never runs for the
 original Tauri application's `v*` releases. Until the remaining parity and
 validation issues are resolved, this development branch does not create
 those native release tags.
+
+## Developer mode and protocol inspector
+
+Configurações now contains the original Manager-style **Modo Desenvolvedor**
+switch and a native **Protocol Inspector**. It uses the existing Rust
+AccountManager's bounded, in-memory per-account sanitized frame buffers
+(up to 500 frames) and supports account selection, direction and text
+filters, pause/resume display, clear, and click-to-copy sanitized payloads.
+Disabling developer mode clears captured frames and stops collecting them;
+no raw authentication frames are stored on disk. The inspector remains
+opt-in so the regular live transport does not pay for frame capture.
