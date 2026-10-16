@@ -1,4 +1,4 @@
-import { ScrollView, LineEdit, ListView } from "std-widgets.slint";
+import { ScrollView, LineEdit, ListView, ComboBox } from "std-widgets.slint";
 
 export struct ProtocolFrameRow {
     stamp: string,
@@ -50,11 +50,22 @@ export struct HuntRow {
     region: string,
     area: string,
     species: string,
+    rank: string,
+    kills-rate: string,
+    seconds-per-kill: string,
+    primary-art: image,
+    has-primary-art: bool,
     xp-trainer: string,
     xp-pokemon: string,
     gold-rate: string,
     confidence: string,
     current: bool,
+}
+export struct HuntBonusRow {
+    kind: int,
+    label: string,
+    value: string,
+    active: bool,
 }
 export struct InventoryRow {
     id: string,
@@ -250,6 +261,34 @@ component SectionHeading inherits Text {
     height: 34px;
     vertical-alignment: center;
 }
+component HuntIvTile inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <image> icon;
+    height: 66px;
+    min-width: 76px;
+    background: #31252e;
+    border-width: 1px;
+    border-color: #986145;
+    border-radius: 6px;
+    VerticalLayout {
+        padding: 6px;
+        spacing: 5px;
+        HorizontalLayout {
+            spacing: 4px;
+            Image { source: root.icon; width: 21px; height: 21px; image-fit: contain; }
+            Text { text: root.label; color: #d9b8a1; font-size: 10px; }
+        }
+        Text {
+            text: root.value;
+            font-weight: 800;
+            color: #fff0d8;
+            font-size: 17px;
+            horizontal-alignment: center;
+        }
+    }
+}
+
 component AccountMiniStat inherits Rectangle {
     in property <string> label;
     in property <string> value;
@@ -510,6 +549,16 @@ export component ManagerWindow inherits Window {
     in-out property <bool> showing-detail: false;
     in-out property <string> hunt-search: "";
     in-out property <int> hunt-ranking-mode: 0;
+    in-out property <[string]> hunt-regions: ["Todas"];
+    in-out property <string> hunt-region-filter: "Todas";
+    in-out property <[HuntBonusRow]> hunt-bonuses: [];
+    in-out property <string> hunt-result-count: "0";
+    in-out property <string> hunt-iv-hp: "—";
+    in-out property <string> hunt-iv-atk: "—";
+    in-out property <string> hunt-iv-def: "—";
+    in-out property <string> hunt-iv-sp-atk: "—";
+    in-out property <string> hunt-iv-sp-def: "—";
+    in-out property <string> hunt-iv-speed: "—";
     in-out property <string> hunt-model-status: "Calculando..." ;
     in-out property <string> inventory-search: "";
     in-out property <int> inventory-tab: 0;
@@ -1037,59 +1086,273 @@ export component ManagerWindow inherits Window {
                         }
 
                         if !root.showing-detail && root.page == 1 : VerticalLayout {
-                            spacing: 14px;
-                            SectionHeading { label: "Melhores locais de caça"; }
+                            spacing: 13px;
                             HorizontalLayout {
-                                Text { text: "Conta"; color: #dfb6a8; vertical-alignment: center; }
+                                SectionHeading { label: "Onde rende mais?"; }
+                                Text { text: "Conta para simular"; color: #deb7a4; vertical-alignment: center; }
                                 for account[i] in root.accounts : WoodButton {
                                     label: account.name;
                                     selected: root.selected-account == i;
                                     clicked => { root.selected-account = i; root.selected-account-changed(i); }
                                 }
                             }
-                            Rectangle {
-                                height: 96px; background: #412936; border-radius: 8px; border-width: 2px; border-color: #88523d;
-                                HorizontalLayout {
-                                    padding: 14px; spacing: 14px;
-                                    Image { width: 68px; height: 68px; source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-hunt.png"); image-fit: contain; }
+                            FlexboxLayout {
+                                spacing: 12px;
+                                flex-wrap: wrap;
+                                Rectangle {
+                                    width: 62%;
+                                    min-width: 510px;
+                                    height: 265px;
+                                    background: #412b37;
+                                    border-width: 2px;
+                                    border-color: #a7644a;
+                                    border-radius: 9px;
                                     VerticalLayout {
+                                        padding: 12px;
+                                        spacing: 8px;
+                                        Text {
+                                            text: "POKÉMON ATIVO";
+                                            color: #f1c987;
+                                            font-size: 13px;
+                                            font-weight: 780;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 15px;
+                                            Rectangle {
+                                                width: 119px;
+                                                height: 119px;
+                                                background: #282333;
+                                                border-width: 1px;
+                                                border-color: #8d6348;
+                                                border-radius: 7px;
+                                                Image {
+                                                    source: @image-url("../../src/assets/pokeidle-theme/backgrounds/pokemon-battle-backdrop.png");
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    image-fit: cover;
+                                                }
+                                                Image {
+                                                    source: root.current-pokemon-art;
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    image-fit: contain;
+                                                }
+                                            }
+                                            VerticalLayout {
+                                                spacing: 7px;
+                                                Text {
+                                                    text: root.current-pokemon;
+                                                    color: #fff0db;
+                                                    font-size: 21px;
+                                                    font-weight: 790;
+                                                }
+                                                Text {
+                                                    text: root.current-pokemon-level + " • Treinador " + root.current-level;
+                                                    color: #e2c5aa;
+                                                    font-size: 13px;
+                                                }
+                                                Text {
+                                                    text: "QUALIDADE  " + root.current-pokemon-quality;
+                                                    color: #f2d89f;
+                                                    font-size: 14px;
+                                                    font-weight: 750;
+                                                }
+                                                Text {
+                                                    text: "POTÊNCIA  " + root.current-pokemon-power;
+                                                    color: #dbaddc;
+                                                    font-size: 14px;
+                                                    font-weight: 750;
+                                                }
+                                                Text {
+                                                    text: "Hunt atual: " + root.current-hunt;
+                                                    color: #d3bdb1;
+                                                    font-size: 12px;
+                                                }
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            HuntIvTile { label: "HP"; value: root.hunt-iv-hp; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-hp.png"); }
+                                            HuntIvTile { label: "ATK"; value: root.hunt-iv-atk; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-attack.png"); }
+                                            HuntIvTile { label: "DEF"; value: root.hunt-iv-def; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-defense.png"); }
+                                            HuntIvTile { label: "SP.ATK"; value: root.hunt-iv-sp-atk; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-special-attack.png"); }
+                                            HuntIvTile { label: "SP.DEF"; value: root.hunt-iv-sp-def; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-defense.png"); }
+                                            HuntIvTile { label: "SPD"; value: root.hunt-iv-speed; icon: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-speed.png"); }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 34%;
+                                    min-width: 275px;
+                                    height: 265px;
+                                    background: #412b37;
+                                    border-width: 2px;
+                                    border-color: #a7644a;
+                                    border-radius: 9px;
+                                    VerticalLayout {
+                                        padding: 12px;
                                         spacing: 6px;
-                                        Text { text: root.current-pokemon + "  •  " + root.current-level; color: #ffe0b9; font-size: 17px; font-weight: 700; }
-                                        Text { text: "Caçando: " + root.current-hunt; color: #d9bbb0; }
-                                        Text { text: "XP/h medido " + root.total-xp; color: #b2e4c0; }
+                                        Text {
+                                            text: "✦ BÔNUS CONSIDERADOS ✦";
+                                            color: #ffdd9e;
+                                            font-size: 15px;
+                                            font-weight: 790;
+                                            horizontal-alignment: center;
+                                        }
+                                        for bonus in root.hunt-bonuses : Rectangle {
+                                            height: 28px;
+                                            background: bonus.active ? #553b45 : #352832;
+                                            border-color: #7e564c;
+                                            border-width: 1px;
+                                            HorizontalLayout {
+                                                padding-left: 7px;
+                                                padding-right: 7px;
+                                                spacing: 6px;
+                                                if bonus.kind == 0 : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-vip.png"); width: 23px; height: 23px; image-fit: contain; }
+                                                if bonus.kind == 1 : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-guild.png"); width: 23px; height: 23px; image-fit: contain; }
+                                                if bonus.kind == 2 : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/where-hunt-guild-boost.png"); width: 23px; height: 23px; image-fit: contain; }
+                                                if bonus.kind == 3 : Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-twitch.png"); width: 23px; height: 23px; image-fit: contain; }
+                                                if bonus.kind == 4 : Text { text: "✦"; color: #ffce7a; font-size: 18px; }
+                                                Text {
+                                                    text: bonus.label;
+                                                    color: #f0d1bd;
+                                                    vertical-alignment: center;
+                                                    font-size: 12px;
+                                                }
+                                                Text {
+                                                    text: bonus.value;
+                                                    color: bonus.active ? #a5edbd : #a38b88;
+                                                    font-weight: 800;
+                                                    font-size: 12px;
+                                                    horizontal-alignment: right;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                        }
+                                        Text {
+                                            text: "Boosts não presentes no snapshot não são incluídos.";
+                                            color: #c4a8a1;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
                                     }
                                 }
                             }
-                            HorizontalLayout {
-                                Text { text: "Buscar hunt"; color: #dbb4a3; vertical-alignment: center; }
-                                LineEdit { text <=> root.hunt-search; placeholder-text: "Nome, região ou área…"; horizontal-stretch: 1; }
-                            }
-                            HorizontalLayout {
-                                Text { text: "Ranking"; color: #e8cfaa; vertical-alignment: center; }
-                                WoodButton { label: "XP Treinador"; selected: root.hunt-ranking-mode == 0; clicked => { root.hunt-ranking-mode = 0; } }
-                                WoodButton { label: "XP Pokémon"; selected: root.hunt-ranking-mode == 1; clicked => { root.hunt-ranking-mode = 1; } }
-                                WoodButton { label: "Gold"; selected: root.hunt-ranking-mode == 2; clicked => { root.hunt-ranking-mode = 2; } }
-                            }
-                            Text { text: root.hunt-model-status; color: #bcab9c; font-size: 12px; }
-                            SectionHeading { label: "Locais disponíveis"; }
-                            for hunt in root.hunts : Rectangle {
-                                height: 91px; border-width: 1px; border-color: #895442; background: #38242f;
-                                HorizontalLayout {
-                                    padding: 10px; spacing: 12px;
-                                    Rectangle {
-                                        width: 42px; height: 42px; background: #513a4e; border-radius: 6px;
-                                        Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-hunt.png"); image-fit: contain; }
+                            Rectangle {
+                                background: #3c2834;
+                                border-width: 2px;
+                                border-color: #9e6249;
+                                border-radius: 9px;
+                                VerticalLayout {
+                                    padding: 12px;
+                                    spacing: 10px;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        VerticalLayout {
+                                            spacing: 4px;
+                                            Text {
+                                                text: "RECOMENDAÇÕES • " + root.hunt-result-count + " HUNTS";
+                                                color: #e7bd84;
+                                                font-size: 12px;
+                                                font-weight: 750;
+                                            }
+                                            SectionHeading { label: "Onde rende mais?"; }
+                                        }
+                                        WoodButton { label: "XP Treinador"; selected: root.hunt-ranking-mode == 0; clicked => { root.hunt-ranking-mode = 0; } }
+                                        WoodButton { label: "XP Pokémon"; selected: root.hunt-ranking-mode == 1; clicked => { root.hunt-ranking-mode = 1; } }
+                                        WoodButton { label: "Ouro"; selected: root.hunt-ranking-mode == 2; clicked => { root.hunt-ranking-mode = 2; } }
                                     }
-                                    VerticalLayout {
-                                        spacing: 5px;
-                                        Text { text: hunt.name + "  •  " + hunt.level; color: #ffe9c7; font-size: 15px; font-weight: 720; }
-                                        Text { text: hunt.region + "  •  " + hunt.area + "  •  " + hunt.species; color: #c6a39d; font-size: 12px; }
-                                        Text { text: "Treinador " + hunt.xp-trainer + " XP/h   •   Pokémon " + hunt.xp-pokemon + " XP/h   •   Gold " + hunt.gold-rate + "/h   •   " + hunt.confidence; color: #9edec0; font-size: 12px; }
+                                    HorizontalLayout {
+                                        spacing: 12px;
+                                        LineEdit {
+                                            text <=> root.hunt-search;
+                                            placeholder-text: "Buscar hunt ou região...";
+                                            horizontal-stretch: 1;
+                                        }
+                                        Text { text: "Região"; color: #d6b8aa; vertical-alignment: center; }
+                                        ComboBox {
+                                            model: root.hunt-regions;
+                                            current-value <=> root.hunt-region-filter;
+                                            width: 210px;
+                                        }
                                     }
-                                    WoodButton { label: hunt.current ? "Atual" : "Ir para hunt"; enabled: !hunt.current && root.current-status == "Online"; clicked => { root.travel(hunt.slug); } }
+                                    Text {
+                                        text: root.hunt-model-status;
+                                        color: #c5b1a1;
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                    }
+                                    ListView {
+                                        height: 475px;
+                                        for hunt in root.hunts : Rectangle {
+                                            height: 89px;
+                                            background: hunt.current ? #5a3e49 : #3b2835;
+                                            border-width: 1px;
+                                            border-color: hunt.current ? #e5af58 : #8c5848;
+                                            HorizontalLayout {
+                                                padding: 9px;
+                                                spacing: 10px;
+                                                Text { text: hunt.rank; width: 29px; color: #edc984; font-size: 18px; font-weight: 800; vertical-alignment: center; }
+                                                Rectangle {
+                                                    width: 48px;
+                                                    height: 48px;
+                                                    background: #292538;
+                                                    border-radius: 5px;
+                                                    if hunt.has-primary-art : Image {
+                                                        source: hunt.primary-art;
+                                                        width: parent.width;
+                                                        height: parent.height;
+                                                        image-fit: contain;
+                                                    }
+                                                    if !hunt.has-primary-art : Image {
+                                                        source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-hunt.png");
+                                                        width: parent.width;
+                                                        height: parent.height;
+                                                        image-fit: contain;
+                                                    }
+                                                }
+                                                VerticalLayout {
+                                                    spacing: 5px;
+                                                    Text { text: hunt.name; font-size: 14px; font-weight: 760; color: #f7e2c0; }
+                                                    Text { text: hunt.area + " • " + hunt.region + " • " + hunt.level; font-size: 12px; color: #d0b4a4; }
+                                                    Text { text: hunt.confidence; font-size: 11px; color: #a7dab9; }
+                                                }
+                                                VerticalLayout {
+                                                    spacing: 5px;
+                                                    Text { text: root.hunt-ranking-mode == 1 ? "XP POKÉMON / H" : "XP TREINADOR / H"; color: #c7b19b; font-size: 10px; }
+                                                    Text { text: root.hunt-ranking-mode == 1 ? hunt.xp-pokemon : hunt.xp-trainer; color: #fff3d2; font-size: 17px; font-weight: 750; }
+                                                }
+                                                VerticalLayout {
+                                                    spacing: 5px;
+                                                    Text { text: "OURO / H"; color: #c7b19b; font-size: 10px; }
+                                                    Text { text: hunt.gold-rate; color: #ffcd82; font-size: 16px; font-weight: 750; }
+                                                }
+                                                VerticalLayout {
+                                                    spacing: 5px;
+                                                    Text { text: "ABATES / H"; color: #c7b19b; font-size: 10px; }
+                                                    Text { text: hunt.kills-rate; color: #f0e0cb; font-size: 16px; font-weight: 750; }
+                                                }
+                                                VerticalLayout {
+                                                    spacing: 5px;
+                                                    Text { text: "TEMPO / ABATE"; color: #c7b19b; font-size: 10px; }
+                                                    Text { text: hunt.seconds-per-kill; color: #f0e0cb; font-size: 16px; font-weight: 750; }
+                                                }
+                                                WoodButton {
+                                                    label: hunt.current ? "Atual" : "Ir para hunt";
+                                                    enabled: !hunt.current && root.current-status == "Online";
+                                                    clicked => { root.travel(hunt.slug); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        text: "PROJEÇÃO, NÃO MEDIÇÃO • Modelo de combate sustentado do Hunt Atlas. XP de treinador e Pokémon separados; observações de HP só da hunt correspondente. Ouro exclui custos e mortes.";
+                                        color: #c4aca5;
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                    }
                                 }
                             }
-                            Text { text: "Os números são PREVISÕES por rotação sustentada (Hunt Atlas), não taxas medidas no servidor. XP do Treinador e Pokémon são exibidos separadamente."; color: #baa5a3; font-size: 12px; wrap: word-wrap; }
                         }
 
                         if !root.showing-detail && root.page == 2 : VerticalLayout {

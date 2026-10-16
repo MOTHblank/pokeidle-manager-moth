@@ -480,6 +480,16 @@ impl NativeCore {
         let selected_looktype = snapshot.and_then(|s| s.state.active_pokemon.as_ref())
             .and_then(|p| p.look_shiny.or(p.looktype));
         ui.set_current_pokemon_art(self.sprite(selected_looktype).0);
+        let ivs = snapshot.and_then(|live| live.state.active_pokemon.as_ref())
+            .and_then(|poke| poke.ivs.as_ref());
+        let iv_label = |value: Option<u64>| value
+            .map(|v| v.to_string()).unwrap_or_else(|| "—".into());
+        ui.set_hunt_iv_hp(iv_label(ivs.and_then(|iv| iv.hp)).into());
+        ui.set_hunt_iv_atk(iv_label(ivs.and_then(|iv| iv.atk)).into());
+        ui.set_hunt_iv_def(iv_label(ivs.and_then(|iv| iv.def)).into());
+        ui.set_hunt_iv_sp_atk(iv_label(ivs.and_then(|iv| iv.sp_atk)).into());
+        ui.set_hunt_iv_sp_def(iv_label(ivs.and_then(|iv| iv.sp_def)).into());
+        ui.set_hunt_iv_speed(iv_label(ivs.and_then(|iv| iv.speed)).into());
         ui.set_current_xp(format_num(snapshot.and_then(|s| s.state.xp).unwrap_or_default()).into());
         ui.set_current_gold(format_num(snapshot.and_then(|s| s.state.gold).unwrap_or_default()).into());
 
@@ -624,6 +634,29 @@ impl NativeCore {
         }
 
         if ui.get_page() == 1 {
+            let bonus = snapshot.map(|live| &live.state.xp_bonus);
+            let selected_ranking = ui.get_hunt_ranking_mode();
+            let bonuses = [
+                (0, "VIP", 50.0, snapshot.and_then(|live| live.state.vip_active).unwrap_or(false)),
+                (1, "Guilda", bonus.and_then(|b| b.guild_rank_pct).unwrap_or(0.0),
+                    bonus.and_then(|b| b.guild_rank_pct).unwrap_or(0.0) > 0.0),
+                (2, "Boost da guilda", 10.0,
+                    bonus.and_then(|b| b.guild_boost_active).unwrap_or(false)),
+                (3, "Twitch", bonus.and_then(|b| b.twitch_pct).unwrap_or(0.0),
+                    bonus.and_then(|b| b.twitch_pct).unwrap_or(0.0) > 0.0),
+                (4, "Evento", bonus.and_then(|b| if selected_ranking == 1 {
+                    b.event_pokemon_pct
+                } else { b.event_trainer_pct }).unwrap_or(0.0),
+                    bonus.and_then(|b| if selected_ranking == 1 {
+                        b.event_pokemon_pct
+                    } else { b.event_trainer_pct }).unwrap_or(0.0) > 0.0),
+            ];
+            ui.set_hunt_bonuses(model(bonuses.into_iter().map(|(kind, name, pct, active)| HuntBonusRow {
+                kind,
+                label: name.into(),
+                value: if active { format!("+{pct:.1}%").into() } else { "OFF".into() },
+                active,
+            }).collect()));
             self.load_hunt_reference();
             ui.set_hunt_model_status(self.hunt_reference_status.lock().clone().into());
             let hp_generation = self.hunt_observations.lock().generation();
@@ -662,6 +695,19 @@ impl NativeCore {
             let search = ui.get_hunt_search().to_lowercase();
             let hunts = self.accounts.account_hunt_options(&id, None)
                 .ok().and_then(|res| res.data).unwrap_or_default();
+            let mut regions = hunts.iter()
+                .filter_map(|hunt| hunt.area.as_deref().or(hunt.region.as_deref()))
+                .filter(|area| !area.trim().is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            regions.sort();
+            regions.dedup();
+            regions.insert(0, "Todas".into());
+            let selected_region = ui.get_hunt_region_filter().to_string();
+            if !regions.iter().any(|region| region == &selected_region) {
+                ui.set_hunt_region_filter("Todas".into());
+            }
+            ui.set_hunt_regions(model(regions.into_iter().map(Into::into).collect()));
             let current = snapshot.and_then(|s| s.state.hunt_slug.as_deref());
             let ranking = ui.get_hunt_ranking_mode();
             let mut hunts = hunts;
@@ -677,32 +723,44 @@ impl NativeCore {
                 value(b.slug.as_str()).cmp(&value(a.slug.as_str()))
                     .then(a.level.cmp(&b.level))
             });
-            let mut rows: Vec<_> = hunts.into_iter().filter(|h| {
-                search.trim().is_empty()
+            let region_filter = ui.get_hunt_region_filter().to_string();
+            let rows: Vec<_> = hunts.into_iter().filter(|h| {
+                (search.trim().is_empty()
                     || h.name.to_lowercase().contains(search.as_str())
                     || h.slug.to_lowercase().contains(search.as_str())
                     || h.region.as_deref().unwrap_or("").to_lowercase().contains(search.as_str())
-                    || h.area.as_deref().unwrap_or("").to_lowercase().contains(search.as_str())
-            }).map(|h| HuntRow {
-                current: current == Some(h.slug.as_str()),
-                name: h.name.into(),
-                level: h.level.map(|v| format!("Lv. {v}")).unwrap_or_default().into(),
-                region: h.region.unwrap_or_default().into(),
-                area: h.area.unwrap_or_default().into(),
-                species: format!("{} espécies", h.species.len()).into(),
-                xp_trainer: by_slug.get(h.slug.as_str())
-                    .and_then(|m| m.trainer_xp_h).map(format_num)
-                    .unwrap_or_else(|| "—".into()).into(),
-                xp_pokemon: by_slug.get(h.slug.as_str())
-                    .and_then(|m| m.pokemon_xp_h).map(format_num)
-                    .unwrap_or_else(|| "—".into()).into(),
-                gold_rate: by_slug.get(h.slug.as_str())
-                    .and_then(|m| m.gold_h).map(format_num)
-                    .unwrap_or_else(|| "—".into()).into(),
-                confidence: by_slug.get(h.slug.as_str())
-                    .map(|m| m.confidence).unwrap_or("Sem modelo").into(),
-                slug: h.slug.into(),
+                    || h.area.as_deref().unwrap_or("").to_lowercase().contains(search.as_str()))
+                && (region_filter == "Todas"
+                    || h.area.as_deref() == Some(region_filter.as_str())
+                    || h.region.as_deref() == Some(region_filter.as_str()))
+            }).take(80).enumerate().map(|(rank, h)| {
+                let forecast = by_slug.get(h.slug.as_str()).copied();
+                let kills = forecast.and_then(|entry| entry.kills_h);
+                let (primary_art, has_primary_art) = self.sprite(h.looktype);
+                HuntRow {
+                    rank: format!("{:02}", rank + 1).into(),
+                    kills_rate: kills.map(format_num).unwrap_or_else(|| "—".into()).into(),
+                    seconds_per_kill: kills.filter(|kills| *kills > 0)
+                        .map(|kills| format!("{:.1}s", 3600.0 / kills as f64))
+                        .unwrap_or_else(|| "—".into()).into(),
+                    primary_art, has_primary_art,
+                    current: current == Some(h.slug.as_str()),
+                    name: h.name.into(),
+                    level: h.level.map(|v| format!("Nv. {v}")).unwrap_or_default().into(),
+                    region: h.region.unwrap_or_default().into(),
+                    area: h.area.unwrap_or_default().into(),
+                    species: format!("{} espécies", h.species.len()).into(),
+                    xp_trainer: forecast.and_then(|m| m.trainer_xp_h).map(format_num)
+                        .unwrap_or_else(|| "—".into()).into(),
+                    xp_pokemon: forecast.and_then(|m| m.pokemon_xp_h).map(format_num)
+                        .unwrap_or_else(|| "—".into()).into(),
+                    gold_rate: forecast.and_then(|m| m.gold_h).map(format_num)
+                        .unwrap_or_else(|| "—".into()).into(),
+                    confidence: forecast.map(|m| m.confidence).unwrap_or("Sem modelo").into(),
+                    slug: h.slug.into(),
+                }
             }).collect();
+            ui.set_hunt_result_count(rows.len().to_string().into());
             ui.set_hunts(model(rows));
         }
         if ui.get_page() == 3 {
