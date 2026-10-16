@@ -18,6 +18,9 @@ comparison throughout the work.
 - The original **eight-route sidebar** in its original order, with the
   original 232px illustrated sidebar, navigation PNGs, brand, wallpaper,
   titleboards and scenic backgrounds reused from src/assets.
+- Active Pokémon atlas sprites are decoded/cropped asynchronously from the
+  original Manager's game asset service and displayed in native account cards
+  and details, with no blocking network I/O on the UI thread.
 - Native themed dashboard metric cards and four account cards with
   clickable **Detalhes** navigation, back navigation and session toggle.
 - **Onde Caçar** with per-account picker, searchable real hunt catalogue
@@ -40,8 +43,8 @@ comparison throughout the work.
 ## Not yet complete
 
 This is **not a complete pixel-perfect or feature-complete React port**.
-The original advanced Market and Inventory workflows, animated Pokémon
-sprites, real Dashboard hunt-session statistics, all automation settings,
+The original advanced Market and Inventory workflows, fully animated sprite
+sequences, real Dashboard hunt-session statistics, all automation settings,
 fine-grained original layouts/typography, Hunt Atlas forecasts, Twitch OAuth onboarding/bonus verification and installation/update flow still need implementation.
 This milestone brings back the original page structure and navigation
 rather than asserting visual or behavioral parity that hasn't been tested.

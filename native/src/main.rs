@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 // Reuses the upstream Manager's protocol, state, market and account-command engine.
+#[path = "../../src-tauri/src/assets.rs"] mod assets;
 #[path = "../../src-tauri/src/accounts.rs"] mod accounts;
 #[path = "../../src-tauri/src/connection.rs"] mod connection;
 #[path = "../../src-tauri/src/domain.rs"] mod domain;
@@ -27,8 +28,8 @@ use firefox::Profile;
 use twitch_irc::TwitchIrc;
 use market::MarketRuntime;
 use parking_lot::Mutex;
-use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use slint::{ComponentHandle, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, sync::{Arc, mpsc}, time::Duration};
 use tokio::runtime::{Builder, Runtime};
 
 pub(crate) const fn recovery_validation_mode_active() -> bool { false }
@@ -41,11 +42,21 @@ struct LoginState {
 struct NativeCore {
     accounts: AccountManager,
     market: MarketRuntime,
+    assets: assets::GameAssetService,
+    sprites: Arc<Mutex<HashMap<u64, Image>>>,
+    pending_sprites: Arc<Mutex<HashSet<u64>>>,
+    sprite_rx: Mutex<mpsc::Receiver<SpriteReady>>,
+    sprite_tx: mpsc::Sender<SpriteReady>,
     twitch: TwitchIrc,
     runtime: Arc<Runtime>,
     profiles: Vec<Profile>,
     login: Vec<Arc<Mutex<LoginState>>>,
 }
+struct SpriteReady {
+    looktype: u64,
+    pixels: Option<(u32, u32, Vec<u8>)>,
+}
+
 impl NativeCore {
     fn new() -> Result<Self, String> {
         let runtime = Arc::new(Builder::new_multi_thread()
@@ -70,6 +81,8 @@ impl NativeCore {
         let db = persistence::open_and_migrate(&dir.join("manager.sqlite"))
             .map_err(|e| e.to_string())?;
         let market = MarketRuntime::new(accounts.clone(), Arc::new(Mutex::new(db)));
+        let assets = assets::GameAssetService::new(&dir)?;
+        let (sprite_tx, sprite_rx) = mpsc::channel();
         let twitch = TwitchIrc::default();
         {
             let _enter = runtime.enter();
@@ -85,7 +98,53 @@ impl NativeCore {
                 }
             }
         }
-        Ok(Self { accounts, market, twitch, runtime, profiles, login })
+        Ok(Self {
+            accounts, market, assets,
+            sprites: Arc::new(Mutex::new(HashMap::new())),
+            pending_sprites: Arc::new(Mutex::new(HashSet::new())),
+            sprite_rx: Mutex::new(sprite_rx), sprite_tx,
+            twitch, runtime, profiles, login
+        })
+    }
+
+    fn sprite(&self, looktype: Option<u64>) -> (Image, bool) {
+        let Some(looktype) = looktype else { return (Image::default(), false) };
+        if let Some(image) = self.sprites.lock().get(&looktype) {
+            return (image.clone(), true);
+        }
+        if !self.pending_sprites.lock().insert(looktype) {
+            return (Image::default(), false);
+        }
+        let asset_service = self.assets.clone();
+        let output = self.sprite_tx.clone();
+        self.runtime.spawn(async move {
+            let pixels = async {
+                let sprite = asset_service.pokemon_sprite(vec![looktype]).await.ok()??;
+                let file = asset_service.resolve_asset(sprite.asset_path).await.ok()?;
+                // Crop only the first idle sprite frame from the original atlas.
+                // Decoding and cropping happen off the GUI thread.
+                let bitmap = image::open(file.path).ok()?;
+                if sprite.x.checked_add(sprite.width)? > bitmap.width()
+                    || sprite.y.checked_add(sprite.height)? > bitmap.height() {
+                    return None;
+                }
+                let rgba = bitmap.crop_imm(sprite.x, sprite.y, sprite.width, sprite.height).to_rgba8();
+                Some((rgba.width(), rgba.height(), rgba.into_raw()))
+            }.await;
+            let _ = output.send(SpriteReady { looktype, pixels });
+        });
+        (Image::default(), false)
+    }
+
+    fn absorb_sprites(&self) {
+        let receiver = self.sprite_rx.lock();
+        while let Ok(sprite) = receiver.try_recv() {
+            if let Some((width, height, pixels)) = sprite.pixels {
+                let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, width, height);
+                self.sprites.lock().insert(sprite.looktype, Image::from_rgba8(buffer));
+            }
+            // Do not repeatedly fetch a non-existent looktype each UI poll.
+        }
     }
 
     fn login(&self, index: usize) {
@@ -118,6 +177,7 @@ impl NativeCore {
     }
 
     fn refresh_ui(&self, ui: &ManagerWindow) {
+        self.absorb_sprites();
         let lives = self.accounts.live_snapshots();
         let mut rows = Vec::with_capacity(4);
         let mut online_count = 0;
@@ -158,6 +218,9 @@ impl NativeCore {
                 level: format!("Nv. {}", snapshot.and_then(|s| s.state.level)
                     .map(|n| n.to_string()).unwrap_or_else(|| "—".into())).into(),
                 pokemon: pokemon.map(|p| p.name.as_str()).unwrap_or("—").into(),
+                pokemon_art: self.sprite(pokemon.and_then(|p| p.look_shiny.or(p.looktype))).0,
+                has_pokemon_art: pokemon.and_then(|p| p.look_shiny.or(p.looktype))
+                    .is_some_and(|id| self.sprites.lock().contains_key(&id)),
                 hp: hp.into(),
                 hunt: snapshot.and_then(|s| s.state.active_hunt.as_ref())
                     .map(|h| h.name.as_str()).unwrap_or("—").into(),
@@ -195,6 +258,9 @@ impl NativeCore {
             .map(|h| h.name.as_str()).unwrap_or("—").into());
         ui.set_current_pokemon(snapshot.and_then(|s| s.state.active_pokemon.as_ref())
             .map(|p| p.name.as_str()).unwrap_or("—").into());
+        let selected_looktype = snapshot.and_then(|s| s.state.active_pokemon.as_ref())
+            .and_then(|p| p.look_shiny.or(p.looktype));
+        ui.set_current_pokemon_art(self.sprite(selected_looktype).0);
         ui.set_current_xp(format_num(snapshot.and_then(|s| s.state.xp).unwrap_or_default()).into());
         ui.set_current_gold(format_num(snapshot.and_then(|s| s.state.gold).unwrap_or_default()).into());
 

@@ -8,6 +8,8 @@ export struct AccountRow {
     online: bool,
     level: string,
     pokemon: string,
+    pokemon-art: image,
+    has-pokemon-art: bool,
     hp: string,
     hunt: string,
     xp: string,
@@ -221,7 +223,13 @@ component AccountCard inherits Rectangle {
                     image-fit: cover;
                     opacity: 0.75;
                 }
-                Text {
+                if root.item.has-pokemon-art : Image {
+                    source: root.item.pokemon-art;
+                    width: parent.width;
+                    height: parent.height;
+                    image-fit: contain;
+                }
+                if !root.item.has-pokemon-art : Text {
                     text: root.item.pokemon;
                     color: #fff1dc;
                     wrap: word-wrap;
@@ -334,6 +342,7 @@ export component ManagerWindow inherits Window {
     in-out property <string> current-xp: "0";
     in-out property <string> current-gold: "0";
     in-out property <string> current-pokemon: "—";
+    in-out property <image> current-pokemon-art;
     in-out property <string> current-status: "Offline";
     in-out property <bool> auto-potion: false;
     in-out property <bool> auto-revive: false;
@@ -444,7 +453,12 @@ export component ManagerWindow inherits Window {
                                 height: 155px; background: #392430; border-width: 2px; border-color: #986044; border-radius: 10px;
                                 HorizontalLayout {
                                     padding: 16px; spacing: 20px;
-                                    Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/pokemon-battle-backdrop.png"); width: 155px; height: 125px; image-fit: cover; }
+                                    Rectangle {
+                                        width: 155px;
+                                        height: 125px;
+                                        Image { source: @image-url("../../src/assets/pokeidle-theme/backgrounds/pokemon-battle-backdrop.png"); width: parent.width; height: parent.height; image-fit: cover; }
+                                        Image { source: root.current-pokemon-art; width: parent.width; height: parent.height; image-fit: contain; }
+                                    }
                                     VerticalLayout {
                                         spacing: 10px;
                                         Text { text: root.current-pokemon; color: #fff0c7; font-size: 23px; font-weight: 700; }

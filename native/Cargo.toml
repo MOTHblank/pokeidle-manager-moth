@@ -30,6 +30,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 open = "5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 
 [profile.release]
 lto = "thin"
