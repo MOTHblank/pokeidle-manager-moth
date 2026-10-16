@@ -140,6 +140,16 @@ the game awards any Twitch bonus. Displayed bonus values must originate from
 the game's authoritative state. A proper native Twitch authorization and
 verified game-bonus end-to-end path remain necessary for final parity.
 
+## UI and forecast workload
+
+The interface refresh loop can run frequently, but costly inventory card
+models are only rebuilt when the account's domain revision, selected scope,
+filters, sorting or asynchronous artwork cache changes. Hunt forecasts are
+memoized independently of hunt search/ranking controls, and re-simulated only
+when lead stats, XP modifiers, the hunt catalogue or observed HP samples
+change. The background Rust game session and automation workers never wait
+for UI model reconstruction.
+
 ## Native preferences
 
 **Configurações** controls the actual interface refresh cadence (1/2/5 s)

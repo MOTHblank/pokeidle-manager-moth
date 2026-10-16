@@ -10,6 +10,7 @@ pub type HpSamples = HashMap<(String, String, u64, u32), Vec<f64>>;
 pub struct HpCollector {
     last_encounter: HashMap<String, (u64, u64, u64, u64)>,
     samples: HpSamples,
+    generation: u64,
 }
 
 impl HpCollector {
@@ -45,10 +46,13 @@ impl HpCollector {
         let key = (account.to_owned(), hunt.to_owned(), species, level);
         let sample = self.samples.entry(key).or_default();
         sample.push(hp as f64);
+        self.generation = self.generation.wrapping_add(1);
         // Limit history without synthesizing observations or disk persistence.
         if sample.len() > 48 { sample.remove(0); }
         if self.samples.len() > 512 { self.samples.clear(); }
     }
+
+    pub fn generation(&self) -> u64 { self.generation }
 
     pub fn snapshot(&self) -> HpSamples {
         self.samples.clone()
