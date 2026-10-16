@@ -1263,6 +1263,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     logging::init();
     let core = Arc::new(NativeCore::new()?);
     let ui = ManagerWindow::new()?;
+    ui.set_native_version(env!("CARGO_PKG_VERSION").into());
     bind_actions(&ui, core.clone());
     {
         let settings = core.preferences.lock();

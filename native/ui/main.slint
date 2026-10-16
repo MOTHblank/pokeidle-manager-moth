@@ -439,6 +439,7 @@ export component ManagerWindow inherits Window {
     in-out property <string> total-gems: "0";
     in-out property <string> connected-accounts: "0/4";
     in-out property <string> status-line: "Pronto";
+    in-out property <string> native-version: "—";
     in-out property <int> ui-refresh-seconds: 1;
     in-out property <bool> restore-profiles-on-launch: true;
     in-out property <string> market-status: "Aguardando conexão";
@@ -1551,6 +1552,7 @@ export component ManagerWindow inherits Window {
                                     }
                                 }
                             }
+                            DisplayRow { heading: "Versão do backend nativo"; subheading: "Rust / Slint"; value: root.native-version; }
                             DisplayRow { heading: "Renderizador"; subheading: "Interface desktop nativa"; value: "Slint / Rust"; }
                             DisplayRow { heading: "Navegador"; subheading: "Apenas para autenticação"; value: "Firefox BiDi"; }
                             DisplayRow { heading: "Game WebSocket"; subheading: "Sem WebView2 ou Tauri"; value: "Rust nativo"; }
