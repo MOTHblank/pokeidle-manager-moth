@@ -52,6 +52,12 @@ struct NativeCore {
     pending_sprites: Arc<Mutex<HashSet<u64>>>,
     sprite_rx: Mutex<mpsc::Receiver<SpriteReady>>,
     sprite_tx: mpsc::Sender<SpriteReady>,
+    item_catalog: Arc<Mutex<Option<Arc<assets::GameItemCatalog>>>>,
+    item_catalog_started: AtomicBool,
+    item_art: Mutex<HashMap<String, Image>>,
+    pending_item_art: Mutex<HashSet<String>>,
+    item_rx: Mutex<mpsc::Receiver<ItemReady>>,
+    item_tx: mpsc::Sender<ItemReady>,
     twitch: TwitchIrc,
     runtime: Arc<Runtime>,
     profiles: Vec<Profile>,
@@ -62,6 +68,10 @@ struct NativeCore {
 }
 struct SpriteReady {
     looktype: u64,
+    pixels: Option<(u32, u32, Vec<u8>)>,
+}
+struct ItemReady {
+    id: String,
     pixels: Option<(u32, u32, Vec<u8>)>,
 }
 
@@ -93,6 +103,7 @@ impl NativeCore {
         let preferences_path = dir.join("ui-preferences.json");
         let preferences = Mutex::new(preferences::NativePreferences::load(&preferences_path));
         let (sprite_tx, sprite_rx) = mpsc::channel();
+        let (item_tx, item_rx) = mpsc::channel();
         let twitch = TwitchIrc::default();
         {
             let _enter = runtime.enter();
@@ -116,6 +127,12 @@ impl NativeCore {
             sprites: Arc::new(Mutex::new(HashMap::new())),
             pending_sprites: Arc::new(Mutex::new(HashSet::new())),
             sprite_rx: Mutex::new(sprite_rx), sprite_tx,
+            item_catalog: Arc::new(Mutex::new(None)),
+            item_catalog_started: AtomicBool::new(false),
+            item_art: Mutex::new(HashMap::new()),
+            pending_item_art: Mutex::new(HashSet::new()),
+            item_rx: Mutex::new(item_rx),
+            item_tx,
             twitch, runtime, profiles, login,
             last_editor_account: Mutex::new(None),
             preferences, preferences_path,
@@ -173,6 +190,49 @@ impl NativeCore {
         (Image::default(), false)
     }
 
+    fn start_item_catalog(&self) {
+        if self.item_catalog.lock().is_some()
+            || self.item_catalog_started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let loader = self.assets.clone();
+        let sink = self.item_catalog.clone();
+        self.runtime.spawn(async move {
+            if let Ok(catalog) = loader.item_catalog().await {
+                *sink.lock() = Some(Arc::new(catalog));
+            }
+        });
+    }
+
+    fn item_artwork(&self, id: &str, asset_key: &str) -> (Image, bool) {
+        let Some(catalog) = self.item_catalog.lock().clone() else {
+            return (Image::default(), false);
+        };
+        let asset_path = catalog.items.get(id).or_else(|| catalog.items.get(asset_key))
+            .and_then(|item| item.asset_path.as_deref());
+        let Some(asset_path) = asset_path else {
+            return (Image::default(), false);
+        };
+        let cache_key = asset_path.to_owned();
+        if let Some(image) = self.item_art.lock().get(&cache_key) {
+            return (image.clone(), true);
+        }
+        if !self.pending_item_art.lock().insert(cache_key.clone()) {
+            return (Image::default(), false);
+        }
+        let loader = self.assets.clone();
+        let sink = self.item_tx.clone();
+        self.runtime.spawn(async move {
+            let pixels = async {
+                let path = loader.resolve_asset(cache_key.clone()).await.ok()?;
+                let img = image::open(path.path).ok()?.to_rgba8();
+                Some((img.width(), img.height(), img.into_raw()))
+            }.await;
+            let _ = sink.send(ItemReady { id: cache_key, pixels });
+        });
+        (Image::default(), false)
+    }
+
     fn absorb_sprites(&self) {
         let receiver = self.sprite_rx.lock();
         while let Ok(sprite) = receiver.try_recv() {
@@ -181,6 +241,14 @@ impl NativeCore {
                 self.sprites.lock().insert(sprite.looktype, Image::from_rgba8(buffer));
             }
             // Do not repeatedly fetch a non-existent looktype each UI poll.
+        }
+   
+        let receiver = self.item_rx.lock();
+        while let Ok(item) = receiver.try_recv() {
+            if let Some((width, height, pixels)) = item.pixels {
+                let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, width, height);
+                self.item_art.lock().insert(item.id, Image::from_rgba8(buffer));
+            }
         }
     }
 
@@ -540,6 +608,7 @@ impl NativeCore {
             ui.set_hunts(model(rows));
         }
         if ui.get_page() == 3 {
+            self.start_item_catalog();
             let tab = ui.get_inventory_tab();
             let search = ui.get_inventory_search().trim().to_lowercase();
             let mut result = Vec::new();
@@ -577,7 +646,10 @@ impl NativeCore {
                         );
                         let label = format!("{}{}  •  Lv. {}",
                             if p.shiny { "✨ " } else { "" }, p.name, p.level);
+                        let (artwork, has_artwork) =
+                            self.sprite(p.look_shiny.or(p.looktype));
                         result.push(InventoryRow {
+                            artwork, has_artwork,
                             id: p.id.into(),
                             owner: self.profiles[index].label().into(),
                             title: label.into(),
@@ -595,7 +667,9 @@ impl NativeCore {
                     if tab == 0 && item.category == "balls" { continue; }
                     if !search.is_empty() && !item.name.to_lowercase().contains(&search)
                         && !item.id.to_lowercase().contains(&search) { continue; }
+                    let (artwork, has_artwork) = self.item_artwork(&item.id, &item.asset_key);
                     result.push(InventoryRow {
+                        artwork, has_artwork,
                         id: item.id.into(),
                         owner: self.profiles[index].id().into(),
                         title: item.name.into(),

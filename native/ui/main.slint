@@ -49,6 +49,8 @@ export struct InventoryRow {
     quantity: string,
     category: string,
     details: string,
+    artwork: image,
+    has-artwork: bool,
     is-pokemon: bool,
     locked: bool,
 }
@@ -1095,7 +1097,13 @@ export component ManagerWindow inherits Window {
                                             height: 51px;
                                             border-radius: 6px;
                                             background: #282033;
-                                            Text {
+                                            if entry.has-artwork : Image {
+                                                source: entry.artwork;
+                                                width: parent.width;
+                                                height: parent.height;
+                                                image-fit: contain;
+                                            }
+                                            if !entry.has-artwork : Text {
                                                 text: entry.is-pokemon ? "◉" : "▣";
                                                 color: #e5b96b;
                                                 font-size: 26px;
