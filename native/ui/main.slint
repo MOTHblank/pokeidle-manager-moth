@@ -1964,6 +1964,38 @@ export component ManagerWindow inherits Window {
                                 font-size: 12px;
                                 wrap: word-wrap;
                             }
+                            SectionHeading { label: "Bônus Twitch informado pelo jogo"; }
+                            FlexboxLayout {
+                                spacing: 9px;
+                                flex-wrap: wrap;
+                                for account in root.accounts : Rectangle {
+                                    width: 244px; height: 62px;
+                                    background: #3d2a36;
+                                    border-width: 1px;
+                                    border-color: account.bonus-twitch ? #659c68 : #7e5b4b;
+                                    border-radius: 7px;
+                                    HorizontalLayout {
+                                        padding: 8px; spacing: 8px;
+                                        Image {
+                                            source: @image-url("../../src/assets/pokeidle-theme/backgrounds/icon-twitch.png");
+                                            width: 35px; height: 35px; image-fit: contain;
+                                        }
+                                        VerticalLayout {
+                                            spacing: 5px;
+                                            Text { text: account.name; color: #ffdfbd; font-size: 12px; font-weight: 750; }
+                                            Text {
+                                                text: account.twitch-bonus;
+                                                color: account.bonus-twitch ? #a9e9b3 : #c6b1a5;
+                                                font-size: 11px; overflow: elide;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                text: "Abra qualquer canal abaixo no navegador. O bônus exibido acima vem da resposta do jogo; a abertura do canal não é confundida com a concessão do bônus.";
+                                color: #c6afa3; font-size: 12px; wrap: word-wrap;
+                            }
                             HorizontalLayout {
                                 spacing: 14px;
                                 Rectangle {
