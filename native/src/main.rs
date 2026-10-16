@@ -176,6 +176,44 @@ impl NativeCore {
         }
     }
 
+    fn start_enabled_profiles(self: &Arc<Self>) {
+        let enabled = read_moth_enabled_profiles();
+        if enabled.is_empty() { return; }
+        let core = self.clone();
+        self.runtime.spawn(async move {
+            // One temporary Firefox at a time. Each profile has a distinct
+            // BiDi socket and remains closed once Rust confirms ownership.
+            for index in enabled {
+                let Some(profile) = core.profiles.get(index).cloned() else { continue };
+                if !profile.path.is_dir() { continue; }
+                let status = core.login[index].clone();
+                {
+                    let mut state = status.lock();
+                    if state.busy { continue; }
+                    state.busy = true;
+                    state.message = "Autenticando perfil ativo do Moth Controller…".into();
+                }
+                let result = authenticate(
+                    profile.clone(), core.accounts.clone(), status.clone()
+                ).await;
+                {
+                    let mut state = status.lock();
+                    state.busy = false;
+                    state.message = match result {
+                        Ok(()) => "Conexão nativa restaurada; Firefox encerrado".into(),
+                        Err(ref error) => format!("Autenticação: {error}"),
+                    };
+                }
+                if result.is_err() {
+                    let _ = core.accounts.transition(
+                        &profile.id(), AccountRuntimeState::Error
+                    );
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        });
+    }
+
     fn login(&self, index: usize) {
         let Some(profile) = self.profiles.get(index).cloned() else { return };
         let status = self.login[index].clone();
@@ -535,6 +573,27 @@ fn automation_row(key: &str, label: &str, description: &str, state: Option<bool>
     }
 }
 
+fn read_moth_enabled_profiles() -> Vec<usize> {
+    let Some(path) = native_data_dir().ok().and_then(|dir| {
+        dir.parent().map(|parent| parent.join("accounts.json"))
+    }) else { return Vec::new() };
+    let Ok(contents) = std::fs::read_to_string(path) else { return Vec::new() };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&contents) else {
+        return Vec::new();
+    };
+    let Some(entries) = value.get("accounts").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let mut slots = std::collections::BTreeSet::new();
+    for row in entries {
+        let Some(slot) = row.get("slot").and_then(|v| v.as_u64()) else { continue };
+        if slot < 4 && row.get("enabled").and_then(|v| v.as_bool()) == Some(true) {
+            slots.insert(slot as usize);
+        }
+    }
+    slots.into_iter().collect()
+}
+
 fn native_data_dir() -> Result<PathBuf, String> {
     #[cfg(windows)]
     {
@@ -758,6 +817,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = ManagerWindow::new()?;
     bind_actions(&ui, core.clone());
     core.refresh_ui(&ui);
+    core.start_enabled_profiles();
     let stop_irc = core.twitch.clone();
     let timer = Timer::default();
     let weak = ui.as_weak();

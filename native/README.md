@@ -78,6 +78,15 @@ The experimental executable uses a separate SQLite file at
 concurrent writes to the old Tauri installation. It does **not** edit,
 reset or copy Moth Controller Firefox profiles.
 
+## Sequential startup login
+
+The native app reads the existing Moth Controller account configuration at
+`%LOCALAPPDATA%\Moth\PokeIdle\accounts.json`. Only slots marked
+`enabled: true` launch Firefox automatically, and launches occur
+**sequentially** after the UI is first displayed. Manual Connect remains
+available. Missing or malformed controller settings cause no automatic
+logins; the native client never rewrites Moth Controller settings or profiles.
+
 ## Verification required
 
 A Windows Rust compiler is unavailable in this execution environment,
