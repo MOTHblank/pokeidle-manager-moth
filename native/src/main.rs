@@ -1179,6 +1179,7 @@ impl NativeCore {
                     )
                 })
                 .map(|row| MarketRow {
+                    id: row.item_id.to_string().into(),
                     name: names.get(&row.item_id)
                         .map(|s| (*s).to_string())
                         .unwrap_or_else(|| format!("Item #{}", row.item_id)).into(),
@@ -1794,7 +1795,8 @@ fn bind_actions(ui: &ManagerWindow, core: Arc<NativeCore>) {
                 if let Some(slot) = edit_market.profiles.iter()
                     .position(|profile| profile.id() == rule.account_id) {
                     ui.set_selected_account(slot as i32);
-                    ui.selected_account_changed(slot as i32);
+                    // The account dropdown updates the same selected index.
+                    // Its Slint changed callback is intentionally a Rust no-op.
                 }
                 ui.set_sniper_editing_id(rule.id.clone().into());
                 ui.set_sniper_item_id(rule.item_id.to_string().into());
